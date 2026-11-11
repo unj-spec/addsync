@@ -105,6 +105,28 @@ namespace WowAddonManager
             }
         }
 
+        /// <summary>
+        /// 이 PC 와우의 현재 상태를 한 줄로 나타낸다.
+        /// 지난번 동기화 때와 달라졌는지 비교하는 데 쓴다.
+        /// </summary>
+        public static string LocalSignature(List<Flavor> flavors, bool includeSettings)
+        {
+            StringBuilder b = new StringBuilder();
+            foreach (Flavor f in flavors)
+            {
+                int n; long by, st;
+                Fingerprint(f.AddOnsPath, out n, out by, out st);
+                b.Append(f.Name).Append(':').Append(n).Append('/').Append(by).Append('/').Append(st);
+                if (includeSettings)
+                {
+                    Fingerprint(f.WtfPath, out n, out by, out st);
+                    b.Append("|w").Append(n).Append('/').Append(by).Append('/').Append(st);
+                }
+                b.Append(';');
+            }
+            return b.ToString();
+        }
+
         /// <summary>내용까지 읽어 만든 해시 (정밀 검사용)</summary>
         public static string ContentHash(string dir)
         {

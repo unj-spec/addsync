@@ -377,6 +377,50 @@ namespace WowAddonManager
             Send("DELETE", ApiFiles + "/" + fileId, null, null);
         }
 
+        // ── 드라이브에 올라가 있는 꾸러미 상태만 살짝 보기 ──────
+        public class RemoteState
+        {
+            public bool Exists;
+            public string ExportedAt = "";
+            public string SourcePC = "";
+            public List<string> Flavors = new List<string>();
+        }
+
+        /// <summary>manifest.json 하나만 받아 와서 드라이브 쪽 상태를 읽는다</summary>
+        public static RemoteState GetRemoteState()
+        {
+            RemoteState st = new RemoteState();
+            string rootId = EnsureFolder();
+            if (rootId.Length == 0) return st;
+
+            string manifestId = "";
+            foreach (DriveFile d in ListFolder(rootId))
+                if (!d.IsFolder && d.Name.Equals(Sync.ManifestName, StringComparison.OrdinalIgnoreCase))
+                { manifestId = d.Id; break; }
+            if (manifestId.Length == 0) return st;
+
+            string temp = Path.Combine(Path.GetTempPath(), "WowAddonManagerPeek");
+            try
+            {
+                if (Directory.Exists(temp)) Directory.Delete(temp, true);
+                Directory.CreateDirectory(temp);
+                DownloadFile(manifestId, Path.Combine(temp, Sync.ManifestName), null);
+
+                Manifest m = Sync.ReadManifest(temp);
+                st.Exists = true;
+                st.ExportedAt = m.ExportedAt;
+                st.SourcePC = m.SourcePC;
+                foreach (string k in m.Flavors.Keys) st.Flavors.Add(k);
+            }
+            catch { }
+            finally
+            {
+                try { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
+                catch { }
+            }
+            return st;
+        }
+
         // ── 폴더 통째로 올리기 / 받기 ───────────────────────────
         static readonly Dictionary<string, string> folderCache =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

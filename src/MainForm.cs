@@ -47,6 +47,10 @@ namespace WowAddonManager
         Label lblCloudState, lblCloudDesc, lblCloudNote;
         FlatBtn btnSignIn, btnSignOut, btnUpload, btnDownload, btnCloudSetup;
         Check chkKeepSignIn;
+        FlatBtn btnSync;
+        Label lblSyncState;
+        bool recordAfterJob;
+        string recordRemoteAt;
         Check chkAutoUpload;
         bool pendingAutoUpload;
         SummaryCard cardExport, cardInstall;
@@ -897,19 +901,36 @@ namespace WowAddonManager
             };
             pnlCloud.Controls.Add(btnSignOut);
 
+            btnSync = new FlatBtn();
+            btnSync.Text = "동기화";
+            btnSync.Kind = BtnKind.Primary;
+            btnSync.Font = Theme.H2;
+            btnSync.Size = new Size(176, 44);
+            btnSync.Location = new Point(0, 168);
+            btnSync.Click += delegate { CloudSync(); };
+            pnlCloud.Controls.Add(btnSync);
+
+            lblSyncState = new Label();
+            lblSyncState.AutoSize = false;
+            lblSyncState.Location = new Point(188, 168);
+            lblSyncState.Size = new Size(420, 44);
+            lblSyncState.Font = Theme.Small;
+            lblSyncState.ForeColor = Theme.TextMuted;
+            lblSyncState.BackColor = Theme.Panel;
+            pnlCloud.Controls.Add(lblSyncState);
+
+            // 방향을 직접 정하고 싶을 때
             btnDownload = new FlatBtn();
-            btnDownload.Text = "드라이브에서 받아 설치";
-            btnDownload.Kind = BtnKind.Primary;
-            btnDownload.Font = Theme.H2;
-            btnDownload.Size = new Size(210, 42);
-            btnDownload.Location = new Point(0, 172);
+            btnDownload.Text = "받아서 설치";
+            btnDownload.Size = new Size(126, 32);
+            btnDownload.Location = new Point(0, 222);
             btnDownload.Click += delegate { CloudPullAndInstall(); };
             pnlCloud.Controls.Add(btnDownload);
 
             btnUpload = new FlatBtn();
-            btnUpload.Text = "이 PC 상태를 올리기";
-            btnUpload.Size = new Size(176, 42);
-            btnUpload.Location = new Point(220, 172);
+            btnUpload.Text = "올리기";
+            btnUpload.Size = new Size(104, 32);
+            btnUpload.Location = new Point(134, 222);
             btnUpload.Click += delegate { CloudExportAndUpload(); };
             pnlCloud.Controls.Add(btnUpload);
 
@@ -921,7 +942,7 @@ namespace WowAddonManager
             pnlCloud.Controls.Add(btnCloudSetup);
 
             chkKeepSignIn = MakeCheck("이 PC에 로그인 유지 — 다음에 켤 때 바로 연결됩니다",
-                new Point(0, 230), settings.GetBool("keepSignIn", false));
+                new Point(0, 266), settings.GetBool("keepSignIn", false));
             chkKeepSignIn.CheckedChanged += delegate
             {
                 GoogleDrive.Persist = chkKeepSignIn.Checked;
@@ -932,12 +953,12 @@ namespace WowAddonManager
             pnlCloud.Controls.Add(chkKeepSignIn);
 
             chkAutoUpload = MakeCheck("내보내기가 끝나면 드라이브에 자동으로 올리기",
-                new Point(0, 258), settings.GetBool("autoUpload", false));
+                new Point(0, 294), settings.GetBool("autoUpload", false));
             pnlCloud.Controls.Add(chkAutoUpload);
 
             lblCloudNote = new Label();
             lblCloudNote.AutoSize = false;
-            lblCloudNote.Location = new Point(0, 292);
+            lblCloudNote.Location = new Point(0, 328);
             lblCloudNote.Size = new Size(620, 70);
             lblCloudNote.Font = Theme.Small;
             lblCloudNote.ForeColor = Theme.TextMuted;
@@ -962,6 +983,8 @@ namespace WowAddonManager
                 lblCloudState.ForeColor = Theme.TextMuted;
                 btnSignIn.Visible = btnSignOut.Visible = false;
                 btnCloudSetup.Visible = true;
+                btnSync.Enabled = false;
+                lblSyncState.Text = "";
                 btnUpload.Enabled = btnDownload.Enabled = chkAutoUpload.Enabled = false;
                 lblCloudNote.Text =
                     "구글이 '어느 프로그램이 요청하는지' 알아야 하기 때문에 OAuth 클라이언트가 필요합니다.\n"
@@ -981,9 +1004,17 @@ namespace WowAddonManager
             btnSignOut.Enabled = on;
             btnUpload.Enabled = on;
             btnDownload.Enabled = on;
+            btnSync.Enabled = on;
             chkAutoUpload.Enabled = on;
-
             chkKeepSignIn.Enabled = true;
+
+            string lastAt = settings.Get("syncRemoteAt", "");
+            lblSyncState.Text = !on
+                ? "로그인하면 동기화할 수 있습니다."
+                : (lastAt.Length == 0
+                    ? "아직 동기화한 적이 없습니다.\n누르면 어느 쪽이 최신인지 보고 알아서 올리거나 받습니다."
+                    : "마지막 동기화: " + Pretty(lastAt)
+                      + "\n누르면 어느 쪽이 최신인지 보고 알아서 올리거나 받습니다.");
             lblCloudNote.Text =
                 "• 각자 본인 구글 계정으로 로그인하고, 파일은 본인 드라이브에 저장됩니다.\n"
               + "• 이 프로그램이 만든 파일만 접근합니다 (drive.file 권한). 다른 파일은 보지 않습니다.\n"
@@ -1050,6 +1081,121 @@ namespace WowAddonManager
             });
             t.IsBackground = true;
             t.Start();
+        }
+
+        static string Pretty(string iso)
+        {
+            DateTime t;
+            if (DateTime.TryParse(iso, out t)) return t.ToString("yyyy-MM-dd HH:mm");
+            return iso;
+        }
+
+        /// <summary>어느 쪽이 최신인지 보고 알아서 올리거나 받는다</summary>
+        void CloudSync()
+        {
+            if (!GoogleDrive.IsConfigured) { CloudSetup(); return; }
+            if (!CheckWow()) return;
+            if (!GoogleDrive.IsSignedIn) { CloudSignIn(delegate { CloudSync(); }); return; }
+            if (CheckedFlavors().Count == 0)
+            {
+                Info("왼쪽에서 게임 버전을 하나 이상 선택하세요.");
+                return;
+            }
+
+            Status("드라이브 상태를 확인하는 중…");
+            GoogleDrive.RemoteState[] box = new GoogleDrive.RemoteState[1];
+            Run(delegate (Reporter rep) { box[0] = GoogleDrive.GetRemoteState(); },
+                null, false, delegate { DecideSync(box[0]); });
+        }
+
+        void DecideSync(GoogleDrive.RemoteState remote)
+        {
+            List<Flavor> sel = CheckedFlavors();
+            string localSig = Sync.LocalSignature(sel, chkExpSettings.Checked);
+            string lastSig = settings.Get("syncLocalSig", "");
+            string lastAt = settings.Get("syncRemoteAt", "");
+
+            bool first = lastSig.Length == 0;
+            bool localChanged = !first && localSig != lastSig;
+            bool remoteChanged = remote != null && remote.Exists && remote.ExportedAt != lastAt;
+
+            // 드라이브가 비었으면 올릴 수밖에 없다
+            if (remote == null || !remote.Exists)
+            {
+                Status("드라이브가 비어 있습니다. 이 PC 상태를 올립니다.");
+                SyncUp();
+                return;
+            }
+
+            if (first)
+            {
+                // 처음 동기화: 이 PC 와우가 비어 있으면 받는 게 맞다
+                int addons = 0;
+                foreach (Flavor f in sel) addons += f.AddOnCount;
+                if (addons == 0) { SyncDown(remote); return; }
+
+                DialogResult r = MessageBox.Show(this,
+                    "이 PC와 드라이브 양쪽에 애드온이 있습니다.\n\n"
+                    + "드라이브: " + remote.SourcePC + " 에서 " + Pretty(remote.ExportedAt) + "\n"
+                    + "이 PC: 애드온 " + addons + "개\n\n"
+                    + "[예] 드라이브 것을 이 PC에 설치\n"
+                    + "[아니오] 이 PC 것을 드라이브에 올리기",
+                    "어느 쪽을 기준으로 할까요?", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (r == DialogResult.Yes) SyncDown(remote);
+                else if (r == DialogResult.No) SyncUp();
+                return;
+            }
+
+            if (localChanged && remoteChanged)
+            {
+                DialogResult r = MessageBox.Show(this,
+                    "양쪽 다 바뀌었습니다.\n\n"
+                    + "드라이브: " + remote.SourcePC + " 에서 " + Pretty(remote.ExportedAt) + "\n"
+                    + "이 PC: 마지막 동기화 뒤 애드온이나 설정이 바뀜\n\n"
+                    + "[예] 드라이브 것으로 맞추기 (이 PC 변경분은 덮어씀)\n"
+                    + "[아니오] 이 PC 것으로 맞추기 (드라이브 것을 덮어씀)",
+                    "어느 쪽을 살릴까요?", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+                if (r == DialogResult.Yes) SyncDown(remote);
+                else if (r == DialogResult.No) SyncUp();
+                return;
+            }
+
+            if (remoteChanged) { SyncDown(remote); return; }
+            if (localChanged) { SyncUp(); return; }
+
+            Status("이미 최신입니다.");
+            Info("이미 최신입니다.\n\n드라이브와 이 PC 가 같은 상태입니다.");
+        }
+
+        void SyncUp()
+        {
+            recordAfterJob = true;
+            recordRemoteAt = null;          // 내보낸 manifest 에서 읽는다
+            pendingAutoUpload = true;
+            StartExport();
+        }
+
+        void SyncDown(GoogleDrive.RemoteState remote)
+        {
+            recordAfterJob = true;
+            recordRemoteAt = remote.ExportedAt;
+            CloudPullAndInstall();
+        }
+
+        /// <summary>동기화가 끝난 시점을 기록해 둔다 (다음에 방향을 판단하려고)</summary>
+        void RecordSync()
+        {
+            string remoteAt = recordRemoteAt;
+            if (remoteAt == null)
+            {
+                try { remoteAt = Sync.ReadManifest(fldExportDir.Value).ExportedAt; }
+                catch { remoteAt = ""; }
+            }
+            settings.Set("syncRemoteAt", remoteAt);
+            settings.Set("syncLocalSig",
+                Sync.LocalSignature(CheckedFlavors(), chkExpSettings.Checked));
+            settings.Save();
+            RefreshCloud();
         }
 
         /// <summary>로그인 → 드라이브에서 받기 → 이 PC 와우에 설치, 한 번에</summary>
@@ -1757,6 +1903,7 @@ namespace WowAddonManager
                         if (error != null)
                         {
                             bar.Value = 0;
+                            recordAfterJob = false;
                             Log("실패: " + error);
                             Status("실패했습니다.");
                             MessageBox.Show(this, error, "작업 실패", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -1777,6 +1924,7 @@ namespace WowAddonManager
                                 return;
                             }
                             if (next != null) { next(); return; }
+                            if (recordAfterJob) { recordAfterJob = false; RecordSync(); }
                             if (doneMessage != null)
                                 MessageBox.Show(this, doneMessage, "완료",
                                     MessageBoxButtons.OK, MessageBoxIcon.Information);

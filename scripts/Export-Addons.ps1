@@ -29,8 +29,8 @@ param(
     # 설정(WTF) 제외하고 애드온만 내보내기
     [switch]$NoSettings,
 
-    # 해상도/그래픽 옵션이 담긴 WTF\Config.wtf 까지 포함
-    # (PC 사양·모니터가 다르면 포함하지 않는 쪽이 안전하다)
+    # 그래픽·해상도 설정까지 그대로 가져간다
+    # (끄면 Config.wtf 에서 그래픽 줄만 빼고 나머지 개인 설정은 모두 담는다)
     [switch]$IncludeGraphicsConfig
 )
 
@@ -84,14 +84,12 @@ foreach ($f in $flavors) {
         $wtf = Join-Path $f.Path "WTF"
         if (Test-Path -LiteralPath $wtf) {
             $zipWtf = Join-Path $Output "$($f.Name)-WTF.zip"
-            $wfiles = Get-ChildItem -LiteralPath $wtf -Recurse -File | Where-Object {
-                if (Test-Excluded $_.Name) { return $false }
-                # 루트 Config.wtf = 해상도/그래픽. 기본 제외
-                if (-not $IncludeGraphicsConfig -and
-                    $_.FullName -eq (Join-Path $wtf "Config.wtf")) { return $false }
-                return $true
-            }
-            New-ZipFromFiles -Files $wfiles -BasePath $wtf -Destination $zipWtf -Label "WTF"
+            $wfiles = Get-ChildItem -LiteralPath $wtf -Recurse -File |
+                      Where-Object { -not (Test-Excluded $_.Name) }
+            # Config.wtf 는 담되, 그래픽 줄만 빼낸다 (사운드·이름표 등 개인 설정이 같이 들어 있다)
+            $cfg = Join-Path $wtf "Config.wtf"
+            $filter = if ($IncludeGraphicsConfig -or -not (Test-Path -LiteralPath $cfg)) { $null } else { $cfg }
+            New-ZipFromFiles -Files $wfiles -BasePath $wtf -Destination $zipWtf -Label "WTF" -FilterConfigPath $filter
             $entry.wtfZip = [IO.Path]::GetFileName($zipWtf)
             $entry.graphicsConfigIncluded = [bool]$IncludeGraphicsConfig
         } else {

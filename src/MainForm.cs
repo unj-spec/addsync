@@ -12,7 +12,7 @@ namespace WowAddonManager
     {
         // 창
         Panel pnlTitle, pnlSide, pnlMain, pnlStatus, pnlPath, pnlFooter, pnlContent, pnlUpdate;
-        SysBtn btnMin, btnClose;
+        SysBtn btnMin, btnMax, btnClose;
         LinkText lnkUpdate, lnkDetail;
 
         // 업데이트 알림
@@ -35,6 +35,13 @@ namespace WowAddonManager
         FlatBtn btnExportDir, btnSourceDir, btnPrimary, btnOpenFolder;
         Check chkExpSettings, chkExpGraphics, chkInsSettings, chkInsClean, chkInsBackup;
         ListView lvAddons;
+        SummaryCard cardExport, cardInstall;
+        Field fldSearch;
+        ToolTip tips = new ToolTip();
+        readonly List<AddonInfo> allAddons = new List<AddonInfo>();
+        readonly Dictionary<string, long> sizeCache = new Dictionary<string, long>();
+        Thread sizeWorker;
+        bool busy;
 
         // 상태
         Label lblStatus;
@@ -78,6 +85,20 @@ namespace WowAddonManager
             BuildSide();
             BuildMain();
             OrderDocks();
+
+            KeyPreview = true;
+            KeyDown += delegate (object s2, KeyEventArgs e2)
+            {
+                if (e2.KeyCode == Keys.Escape && !busy) Close();
+                else if (e2.KeyCode == Keys.F5) Detect(true);
+            };
+
+            tips.SetToolTip(btnBrowseWow, "와우 설치 폴더를 직접 고릅니다 (F5: 다시 찾기)");
+            tips.SetToolTip(btnExportDir, "애드온과 설정을 저장할 폴더");
+            tips.SetToolTip(btnSourceDir, "내보내기로 만든 폴더 (manifest.json 이 있는 곳)");
+            tips.SetToolTip(chkExpGraphics, "켜면 해상도·화질까지 그대로 갑니다. 모니터가 다르면 끄세요.");
+            tips.SetToolTip(chkInsClean, "대상 PC에만 있던 애드온까지 지웁니다.");
+            tips.SetToolTip(fldSearch.Box, "애드온 이름이나 폴더명으로 거릅니다");
 
             SetTab(int.Parse(settings.Get("tab", "0")));
             Shown += delegate { Detect(false); StartSilentUpdateCheck(); };
@@ -185,15 +206,24 @@ namespace WowAddonManager
             Controls.Add(pnlTitle);
 
             btnClose = new SysBtn();
-            btnClose.IsClose = true;
+            btnClose.Kind = SysKind.Close;
             btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnClose.Click += delegate { Close(); };
             pnlTitle.Controls.Add(btnClose);
 
+            btnMax = new SysBtn();
+            btnMax.Kind = SysKind.Max;
+            btnMax.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnMax.Click += delegate { ToggleMax(); };
+            pnlTitle.Controls.Add(btnMax);
+
             btnMin = new SysBtn();
+            btnMin.Kind = SysKind.Min;
             btnMin.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnMin.Click += delegate { WindowState = FormWindowState.Minimized; };
             pnlTitle.Controls.Add(btnMin);
+
+            pnlTitle.DoubleClick += delegate { ToggleMax(); };
 
             pnlTitle.Resize += delegate { LayoutTitle(); };
             LayoutTitle();
@@ -202,7 +232,25 @@ namespace WowAddonManager
         void LayoutTitle()
         {
             btnClose.Location = new Point(pnlTitle.Width - btnClose.Width - 8, 8);
-            btnMin.Location = new Point(btnClose.Left - btnMin.Width - 2, 8);
+            btnMax.Location = new Point(btnClose.Left - btnMax.Width - 2, 8);
+            btnMin.Location = new Point(btnMax.Left - btnMin.Width - 2, 8);
+        }
+
+        /// <summary>최대화 / 복원. 테두리 없는 창이라 작업 표시줄을 덮지 않게 직접 범위를 잡는다</summary>
+        void ToggleMax()
+        {
+            if (WindowState == FormWindowState.Maximized)
+            {
+                WindowState = FormWindowState.Normal;
+                btnMax.Kind = SysKind.Max;
+            }
+            else
+            {
+                MaximizedBounds = Screen.FromControl(this).WorkingArea;
+                WindowState = FormWindowState.Maximized;
+                btnMax.Kind = SysKind.Restore;
+            }
+            btnMax.Invalidate();
         }
 
         // ── 좌측 ────────────────────────────────────────────────
@@ -463,8 +511,8 @@ namespace WowAddonManager
             Title("내보내기", pnlExport);
 
             lblExpDesc = new Label();
-            lblExpDesc.Text = "이 PC의 애드온과 설정을 한 폴더에 담습니다.\n" +
-                              "그 폴더를 USB나 클라우드에 올려 두고, 다른 PC에서 '설치'로 가져오면 됩니다.";
+            lblExpDesc.Text = "애드온과 개인 설정을 한 폴더에 담습니다. 키바인드 · 매크로 · 인터페이스 배치 ·\n" +
+                              "사운드 · 이름표까지 그대로 따라가고, 그래픽과 해상도만 빠집니다.";
             lblExpDesc.AutoSize = false;
             lblExpDesc.Location = new Point(0, 30);
             lblExpDesc.Size = new Size(620, 42);
@@ -491,15 +539,21 @@ namespace WowAddonManager
             };
             pnlExport.Controls.Add(btnExportDir);
 
-            chkExpSettings = MakeCheck("설정(WTF)도 함께 — 애드온 프로필 · 키바인드 · 매크로",
+            chkExpSettings = MakeCheck("개인 설정도 함께 — 애드온 프로필 · 키바인드 · 매크로 · 인터페이스 · 사운드",
                 new Point(0, 150), settings.GetBool("expSettings", true));
             chkExpSettings.CheckedChanged += delegate { chkExpGraphics.Enabled = chkExpSettings.Checked; };
             pnlExport.Controls.Add(chkExpSettings);
 
-            chkExpGraphics = MakeCheck("해상도 · 그래픽 설정도 포함 (모니터가 다르면 권장하지 않음)",
+            chkExpGraphics = MakeCheck("그래픽 · 해상도 설정까지 그대로 (모니터가 다르면 권장하지 않음)",
                 new Point(25, 178), settings.GetBool("expGraphics", false));
             chkExpGraphics.ForeColor = Theme.TextDim;
             pnlExport.Controls.Add(chkExpGraphics);
+
+            cardExport = new SummaryCard();
+            cardExport.Caption = "내보낼 내용";
+            cardExport.Empty = "왼쪽에서 게임 버전을 선택하세요.";
+            cardExport.Location = new Point(0, 216);
+            pnlExport.Controls.Add(cardExport);
 
             pnlExport.Resize += delegate
             {
@@ -507,6 +561,7 @@ namespace WowAddonManager
                 lblExpDesc.Width = w;
                 btnExportDir.Location = new Point(w - 84, 104);
                 fldExportDir.Size = new Size(Math.Max(120, w - 84 - 8), 32);
+                cardExport.Size = new Size(w, cardExport.NeededHeight);
             };
         }
 
@@ -559,7 +614,7 @@ namespace WowAddonManager
             lblInsInfo.BackColor = Theme.Panel;
             pnlInstall.Controls.Add(lblInsInfo);
 
-            chkInsSettings = MakeCheck("설정(WTF)도 함께 설치", new Point(0, 170),
+            chkInsSettings = MakeCheck("개인 설정도 함께 설치", new Point(0, 170),
                 settings.GetBool("insSettings", true));
             pnlInstall.Controls.Add(chkInsSettings);
 
@@ -572,6 +627,12 @@ namespace WowAddonManager
             chkInsClean.ForeColor = Theme.Danger;
             pnlInstall.Controls.Add(chkInsClean);
 
+            cardInstall = new SummaryCard();
+            cardInstall.Caption = "가져올 내용";
+            cardInstall.Empty = "내보내기로 만든 폴더를 고르세요.";
+            cardInstall.Location = new Point(0, 264);
+            pnlInstall.Controls.Add(cardInstall);
+
             pnlInstall.Resize += delegate
             {
                 int w = pnlInstall.Width;
@@ -579,6 +640,7 @@ namespace WowAddonManager
                 lblInsInfo.Width = w;
                 btnSourceDir.Location = new Point(w - 84, 104);
                 fldSourceDir.Size = new Size(Math.Max(120, w - 84 - 8), 32);
+                cardInstall.Size = new Size(w, cardInstall.NeededHeight);
             };
         }
 
@@ -599,7 +661,14 @@ namespace WowAddonManager
             lvAddons.BackColor = Theme.Field;
             lvAddons.ForeColor = Theme.Text;
             lvAddons.OwnerDraw = true;
-            lvAddons.Location = new Point(0, 34);
+            fldSearch = new Field();
+            fldSearch.Size = new Size(220, 30);
+            fldSearch.Box.Text = "";
+            fldSearch.Box.TextChanged += delegate { ApplyAddonFilter(); };
+            fldSearch.HandleCreated += delegate { fldSearch.SetPlaceholder("애드온 검색"); };
+            pnlAddons.Controls.Add(fldSearch);
+
+            lvAddons.Location = new Point(0, 44);
             lvAddons.Columns.Add("애드온", 240);
             lvAddons.Columns.Add("폴더", 200);
             lvAddons.Columns.Add("버전", 100);
@@ -633,7 +702,8 @@ namespace WowAddonManager
 
             pnlAddons.Resize += delegate
             {
-                lvAddons.Size = new Size(pnlAddons.Width, Math.Max(60, pnlAddons.Height - 34));
+                fldSearch.Location = new Point(pnlAddons.Width - fldSearch.Width, 0);
+                lvAddons.Size = new Size(pnlAddons.Width, Math.Max(60, pnlAddons.Height - 44));
                 // 마지막 열을 남는 폭까지 늘려 머리글에 빈 칸이 생기지 않게 한다
                 int used = 0;
                 for (int i = 0; i < lvAddons.Columns.Count - 1; i++) used += lvAddons.Columns[i].Width;
@@ -699,6 +769,7 @@ namespace WowAddonManager
             pnlStatus.Controls.Add(lblStatus);
 
             bar = new Bar();
+            bar.Visible = false;
             bar.Location = new Point(350, 14);
             pnlStatus.Controls.Add(bar);
 
@@ -826,23 +897,9 @@ namespace WowAddonManager
         {
             if (lvAddons == null || !pnlAddons.Visible) return;
             Flavor f = lstFlavors.SelectedItem as Flavor;
-            lvAddons.BeginUpdate();
-            lvAddons.Items.Clear();
-            if (f != null)
-            {
-                foreach (AddonInfo a in WowCore.GetAddons(f.AddOnsPath))
-                {
-                    string src = a.Curse != "" ? "CurseForge"
-                               : a.Wago != "" ? "Wago"
-                               : a.WowI != "" ? "WoWInterface" : "";
-                    ListViewItem it = new ListViewItem(a.Title);
-                    it.SubItems.Add(a.Folder);
-                    it.SubItems.Add(a.Version);
-                    it.SubItems.Add(src);
-                    lvAddons.Items.Add(it);
-                }
-            }
-            lvAddons.EndUpdate();
+            allAddons.Clear();
+            if (f != null) allAddons.AddRange(WowCore.GetAddons(f.AddOnsPath));
+            ApplyAddonFilter();
         }
 
         void UpdateHints()
@@ -860,6 +917,130 @@ namespace WowAddonManager
             else lblHint.Text = "선택한 " + sel.Count + "개 버전에 설치합니다.";
 
             btnPrimary.Enabled = sel.Count > 0;
+            UpdateExportSummary();
+        }
+
+        // ── 요약 카드 ───────────────────────────────────────────
+        void UpdateExportSummary()
+        {
+            if (cardExport == null) return;
+            List<Flavor> sel = CheckedFlavors();
+            cardExport.Rows.Clear();
+
+            long total = 0;
+            bool pending = false;
+            foreach (Flavor f in sel)
+            {
+                string size;
+                long bytes;
+                if (sizeCache.TryGetValue(f.Path, out bytes))
+                {
+                    size = WowCore.HumanSize(bytes);
+                    total += bytes;
+                }
+                else { size = "계산 중…"; pending = true; }
+
+                cardExport.Rows.Add(new string[] {
+                    VersionList.FlavorName(f.Name), "애드온 " + f.AddOnCount + "개", size });
+            }
+
+            cardExport.FootLeft = sel.Count > 0 ? "원본 합계" : "";
+            cardExport.FootRight = pending ? "계산 중…" : WowCore.HumanSize(total);
+            cardExport.Size = new Size(pnlExport.Width, cardExport.NeededHeight);
+            cardExport.Invalidate();
+
+            if (pending) StartSizeScan(sel);
+        }
+
+        /// <summary>폴더 용량은 느리므로 뒤에서 재고 캐시해 둔다</summary>
+        void StartSizeScan(List<Flavor> sel)
+        {
+            if (sizeWorker != null && sizeWorker.IsAlive) return;
+            List<Flavor> todo = new List<Flavor>();
+            foreach (Flavor f in sel) if (!sizeCache.ContainsKey(f.Path)) todo.Add(f);
+            if (todo.Count == 0) return;
+
+            sizeWorker = new Thread(delegate ()
+            {
+                foreach (Flavor f in todo)
+                {
+                    long n = WowCore.DirectorySize(f.AddOnsPath) + WowCore.DirectorySize(f.WtfPath);
+                    Flavor captured = f;
+                    long value = n;
+                    try
+                    {
+                        BeginInvoke((MethodInvoker)delegate
+                        {
+                            sizeCache[captured.Path] = value;
+                            UpdateExportSummary();
+                        });
+                    }
+                    catch { return; }
+                }
+            });
+            sizeWorker.IsBackground = true;
+            sizeWorker.Start();
+        }
+
+        void UpdateInstallSummary(ManifestInfo mi)
+        {
+            if (cardInstall == null) return;
+            cardInstall.Rows.Clear();
+            long total = 0;
+
+            if (mi != null)
+            {
+                foreach (KeyValuePair<string, FlavorEntry> kv in mi.Flavors)
+                {
+                    long bytes = 0;
+                    foreach (string z in new string[] { kv.Value.AddOnsZip, kv.Value.WtfZip })
+                    {
+                        if (string.IsNullOrEmpty(z)) continue;
+                        try
+                        {
+                            string fp = Path.Combine(fldSourceDir.Value, z);
+                            if (File.Exists(fp)) bytes += new FileInfo(fp).Length;
+                        }
+                        catch { }
+                    }
+                    total += bytes;
+                    cardInstall.Rows.Add(new string[] {
+                        VersionList.FlavorName(kv.Key),
+                        "애드온 " + kv.Value.Folders + "개",
+                        WowCore.HumanSize(bytes) });
+                }
+            }
+
+            cardInstall.FootLeft = cardInstall.Rows.Count > 0 ? "파일 합계" : "";
+            cardInstall.FootRight = WowCore.HumanSize(total);
+            cardInstall.Size = new Size(pnlInstall.Width, cardInstall.NeededHeight);
+            cardInstall.Invalidate();
+        }
+
+        // ── 애드온 검색 ─────────────────────────────────────────
+        void ApplyAddonFilter()
+        {
+            if (lvAddons == null) return;
+            string q = fldSearch.Value.Trim().ToLowerInvariant();
+
+            lvAddons.BeginUpdate();
+            lvAddons.Items.Clear();
+            foreach (AddonInfo a in allAddons)
+            {
+                if (q.Length > 0 &&
+                    a.Title.ToLowerInvariant().IndexOf(q) < 0 &&
+                    a.Folder.ToLowerInvariant().IndexOf(q) < 0) continue;
+
+                string src = a.Curse != "" ? "CurseForge"
+                           : a.Wago != "" ? "Wago"
+                           : a.WowI != "" ? "WoWInterface" : "";
+                ListViewItem it = new ListViewItem(a.Title);
+                it.SubItems.Add(a.Folder);
+                it.SubItems.Add(a.Version);
+                it.SubItems.Add(src);
+                lvAddons.Items.Add(it);
+            }
+            lvAddons.EndUpdate();
         }
 
         void ShowManifest()
@@ -872,17 +1053,20 @@ namespace WowAddonManager
                 foreach (string k in mi.Flavors.Keys) names.Add(VersionList.FlavorName(k));
                 lblInsInfo.ForeColor = Theme.Ok;
                 lblInsInfo.Text = mi.SourcePC + " 에서 내보냄 · " + string.Join(", ", names.ToArray())
-                    + (mi.HasSettings ? " · 설정 포함" : " · 설정 없음");
+                    + (mi.HasSettings ? " · 개인 설정 포함" : " · 설정 없음");
+                UpdateInstallSummary(mi);
             }
             catch (FileNotFoundException)
             {
                 lblInsInfo.ForeColor = Theme.TextMuted;
                 lblInsInfo.Text = "내보내기로 만든 폴더를 고르세요. (manifest.json 이 있는 폴더)";
+                UpdateInstallSummary(null);
             }
             catch (Exception ex)
             {
                 lblInsInfo.ForeColor = Theme.Danger;
                 lblInsInfo.Text = ex.Message;
+                UpdateInstallSummary(null);
             }
         }
 
@@ -1049,6 +1233,8 @@ namespace WowAddonManager
             tabs.Enabled = !busy;
             pnlExport.Enabled = !busy;
             pnlInstall.Enabled = !busy;
+            this.busy = busy;
+            bar.Visible = busy;
             Cursor = busy ? Cursors.AppStarting : Cursors.Default;
             if (busy) { bar.Value = 0; btnOpenFolder.Visible = false; }
         }

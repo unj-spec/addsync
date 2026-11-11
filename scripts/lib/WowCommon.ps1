@@ -108,13 +108,53 @@ function Get-InstalledAddons {
     }
 }
 
+# Config.wtf 에서 그래픽·하드웨어 설정만 걸러낸다 (앱의 WowCore 와 같은 규칙)
+$script:GfxPrefixes = @('gx', 'graphics', 'ffx')
+$script:GfxNames = @(
+    'brightness','contrast','lowlatencymode','msaaquality','outlineenginemode',
+    'renderscale','resamplequality','resamplealwayssharpen','ssao','hwdetect',
+    'farclip','horizonclip','horizonstart','groundeffectdensity','groundeffectdist',
+    'doodadlodscale','lodobjectcullsize','lodobjectfadescale','lodobjectminsize',
+    'physicslevel','projectedtextures','refraction','reflectionmode','rippledetail',
+    'shadowmode','shadowrt','shadowsoft','shadowtexturesize','shadowblendcascades',
+    'shadownumcascades','entityshadowfadescale','sunshafts','terrainloddist',
+    'terrainloddiv','volumefog','volumefoglevel','vsync','waterdetail',
+    'weatherdensity','wmoloddist','texturefilteringmode','videooptionsversion',
+    'usetargetfps','targetfps','maxfps','maxfpsbk','uiscale','useuiscale',
+    'componentmodellevel','particledensity','spelldensity','sound_outputdrivername'
+)
+
+function Test-GraphicsCVar {
+    param([string]$Name)
+    if ([string]::IsNullOrEmpty($Name)) { return $false }
+    $n = $Name.ToLowerInvariant()
+    if ($n.StartsWith('raid')) { $n = $n.Substring(4) }
+    foreach ($p in $script:GfxPrefixes) { if ($n.StartsWith($p)) { return $true } }
+    return ($script:GfxNames -contains $n)
+}
+
+function Get-FilteredConfigWtf {
+    param([string]$Path)
+    $out = New-Object System.Text.StringBuilder
+    $kept = 0; $dropped = 0
+    foreach ($line in (Get-Content -LiteralPath $Path)) {
+        $m = [regex]::Match($line, '^\s*SET\s+([A-Za-z0-9_\-]+)\s')
+        if ($m.Success -and (Test-GraphicsCVar $m.Groups[1].Value)) { $dropped++; continue }
+        [void]$out.AppendLine($line)
+        if ($m.Success) { $kept++ }
+    }
+    return @{ Text = $out.ToString(); Kept = $kept; Dropped = $dropped }
+}
+
 function New-ZipFromFiles {
     <# 파일 목록을 BasePath 기준 상대경로로 zip 에 담는다 #>
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Files,
         [Parameter(Mandatory)][string]$BasePath,
         [Parameter(Mandatory)][string]$Destination,
-        [string]$Label = 'files'
+        [string]$Label = 'files',
+        # 이 경로의 파일은 그래픽 줄을 빼고 담는다 (Config.wtf)
+        [string]$FilterConfigPath
     )
     if (Test-Path -LiteralPath $Destination) { Remove-Item -LiteralPath $Destination -Force }
     $base = (Resolve-Path -LiteralPath $BasePath).Path.TrimEnd('\') + '\'
@@ -125,8 +165,18 @@ function New-ZipFromFiles {
         foreach ($f in $Files) {
             $rel = $f.FullName.Substring($base.Length).Replace('\', '/')
             try {
-                [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-                    $zip, $f.FullName, $rel, [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+                if ($FilterConfigPath -and
+                    ($f.FullName -ieq (Resolve-Path -LiteralPath $FilterConfigPath).Path)) {
+                    $res = Get-FilteredConfigWtf -Path $f.FullName
+                    $entry = $zip.CreateEntry($rel, [IO.Compression.CompressionLevel]::Optimal)
+                    $sw = New-Object System.IO.StreamWriter($entry.Open(),
+                              (New-Object System.Text.UTF8Encoding($false)))
+                    $sw.Write($res.Text); $sw.Dispose()
+                    Write-Host ("  Config.wtf - 개인 설정 {0}개 포함, 그래픽 {1}개 제외" -f $res.Kept, $res.Dropped)
+                } else {
+                    [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                        $zip, $f.FullName, $rel, [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+                }
             } catch {
                 Write-Warning "  건너뜀: $rel ($($_.Exception.Message))"
                 continue

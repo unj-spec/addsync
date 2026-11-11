@@ -151,10 +151,13 @@ namespace WowAddonManager
         }
     }
 
-    /// <summary>창 단추 (최소화 / 닫기)</summary>
+    public enum SysKind { Min, Max, Restore, Close }
+
+    /// <summary>창 단추 (최소화 / 최대화 / 복원 / 닫기)</summary>
     public class SysBtn : Control
     {
-        public bool IsClose;
+        public SysKind Kind = SysKind.Min;
+        public bool IsClose { get { return Kind == SysKind.Close; } }
         bool hover;
 
         public SysBtn()
@@ -182,12 +185,23 @@ namespace WowAddonManager
             int cx = Width / 2, cy = Height / 2;
             using (Pen p = new Pen(fg, 1.4f))
             {
-                if (IsClose)
+                if (Kind == SysKind.Close)
                 {
                     g.DrawLine(p, cx - 5, cy - 5, cx + 5, cy + 5);
                     g.DrawLine(p, cx + 5, cy - 5, cx - 5, cy + 5);
                 }
-                else g.DrawLine(p, cx - 5, cy, cx + 5, cy);
+                else if (Kind == SysKind.Min)
+                    g.DrawLine(p, cx - 5, cy, cx + 5, cy);
+                else if (Kind == SysKind.Max)
+                    g.DrawRectangle(p, cx - 5, cy - 5, 10, 10);
+                else
+                {
+                    g.DrawRectangle(p, cx - 6, cy - 2, 8, 8);
+                    g.DrawLines(p, new Point[] {
+                        new Point(cx - 3, cy - 4), new Point(cx - 3, cy - 6),
+                        new Point(cx + 6, cy - 6), new Point(cx + 6, cy + 3),
+                        new Point(cx + 4, cy + 3) });
+                }
             }
             g.SmoothingMode = SmoothingMode.Default;
         }
@@ -450,6 +464,17 @@ namespace WowAddonManager
 
         public string Value { get { return Box.Text; } set { Box.Text = value; } }
 
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr wp, string lp);
+
+        /// <summary>비어 있을 때 흐리게 보이는 안내 글 (윈도우 기본 기능을 쓴다)</summary>
+        public void SetPlaceholder(string text)
+        {
+            const int EM_SETCUEBANNER = 0x1501;
+            try { SendMessage(Box.Handle, EM_SETCUEBANNER, (IntPtr)1, text); }
+            catch { }
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             e.Graphics.Clear(BackColor);
@@ -533,6 +558,77 @@ namespace WowAddonManager
             {
                 int w = Math.Max(3, (int)(Width * (val / 100.0)));
                 Theme.FillRound(g, new Rectangle(0, 0, w, Height), 2, Theme.Accent);
+            }
+        }
+    }
+
+    /// <summary>요약 카드 — 제목 한 줄 + 표 형태의 줄들</summary>
+    public class SummaryCard : Control
+    {
+        public string Caption = "";
+        public string Empty = "";
+        public List<string[]> Rows = new List<string[]>();   // {왼쪽, 가운데, 오른쪽}
+        public string FootLeft = "", FootRight = "";
+
+        public SummaryCard()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            BackColor = Theme.Panel;
+        }
+
+        public int NeededHeight
+        {
+            get
+            {
+                int rows = Rows.Count > 0 ? Rows.Count : 1;
+                return 38 + rows * 24 + (FootLeft.Length > 0 ? 30 : 8);
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.Clear(BackColor);
+            Rectangle r = new Rectangle(0, 0, Width, Height);
+            Theme.DrawRound(g, r, 8, Color.FromArgb(21, 24, 30), Theme.Line);
+
+            TextRenderer.DrawText(g, Caption, Theme.Tiny,
+                new Rectangle(14, 12, Width - 28, 16), Theme.TextMuted, TextFormatFlags.Left);
+
+            int y = 34;
+            if (Rows.Count == 0)
+            {
+                TextRenderer.DrawText(g, Empty, Theme.Body,
+                    new Rectangle(14, y, Width - 28, 22), Theme.TextMuted,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                return;
+            }
+
+            foreach (string[] row in Rows)
+            {
+                TextRenderer.DrawText(g, row[0], Theme.Body,
+                    new Rectangle(14, y, Width - 240, 22), Theme.Text,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                TextRenderer.DrawText(g, row[1], Theme.Body,
+                    new Rectangle(Width - 230, y, 110, 22), Theme.TextDim,
+                    TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+                TextRenderer.DrawText(g, row[2], Theme.Body,
+                    new Rectangle(Width - 114, y, 100, 22), Theme.TextDim,
+                    TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+                y += 24;
+            }
+
+            if (FootLeft.Length > 0)
+            {
+                using (Pen p = new Pen(Theme.Line))
+                    g.DrawLine(p, 14, y + 3, Width - 14, y + 3);
+                TextRenderer.DrawText(g, FootLeft, Theme.BodyBold,
+                    new Rectangle(14, y + 6, Width - 150, 22), Theme.Text,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                TextRenderer.DrawText(g, FootRight, Theme.BodyBold,
+                    new Rectangle(Width - 134, y + 6, 120, 22), Theme.AccentText,
+                    TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
             }
         }
     }

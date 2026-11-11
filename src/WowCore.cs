@@ -76,6 +76,55 @@ namespace WowAddonManager
         static readonly string[] ExcludeNames = { "cache.md5", "Thumbs.db", "desktop.ini" };
         static readonly string[] ExcludeSuffixes = { ".old", ".bak" };
 
+        // ── Config.wtf 의 그래픽 설정만 골라내기 ───────────────────
+        // 이름이 이 접두어로 시작하면 그래픽
+        static readonly string[] GfxPrefixes = { "gx", "graphics", "ffx" };
+
+        // 이 이름들은 그래픽·하드웨어에 묶인 값이라 다른 PC로 옮기면 안 된다
+        static readonly string[] GfxNames = {
+            "brightness", "contrast", "lowlatencymode", "msaaquality", "outlineenginemode",
+            "renderscale", "resamplequality", "resamplealwayssharpen", "ssao", "hwdetect",
+            "farclip", "horizonclip", "horizonstart", "groundeffectdensity", "groundeffectdist",
+            "doodadlodscale", "lodobjectcullsize", "lodobjectfadescale", "lodobjectminsize",
+            "physicslevel", "projectedtextures", "refraction", "reflectionmode", "rippledetail",
+            "shadowmode", "shadowrt", "shadowsoft", "shadowtexturesize", "shadowblendcascades",
+            "shadownumcascades", "entityshadowfadescale", "sunshafts", "terrainloddist",
+            "terrainloddiv", "volumefog", "volumefoglevel", "vsync", "waterdetail",
+            "weatherdensity", "wmoloddist", "texturefilteringmode", "videooptionsversion",
+            "usetargetfps", "targetfps", "maxfps", "maxfpsbk", "uiscale", "useuiscale",
+            "componentmodellevel", "particledensity", "spelldensity",
+            "sound_outputdrivername"   // 오디오 장치 이름 — PC마다 다르다
+        };
+
+        /// <summary>그래픽·해상도·하드웨어에 묶인 설정인가</summary>
+        public static bool IsGraphicsCVar(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            string n = name.ToLowerInvariant();
+
+            // RAID 접두어가 붙은 것은 전부 전투 전용 그래픽 설정이다
+            if (n.StartsWith("raid")) n = n.Substring(4);
+
+            foreach (string p in GfxPrefixes) if (n.StartsWith(p)) return true;
+            foreach (string g in GfxNames) if (n == g) return true;
+            return false;
+        }
+
+        /// <summary>Config.wtf 에서 그래픽 줄만 뺀 내용을 돌려준다</summary>
+        public static string FilterConfigWtf(string path, out int kept, out int dropped)
+        {
+            kept = 0; dropped = 0;
+            StringBuilder b = new StringBuilder();
+            foreach (string line in File.ReadAllLines(path))
+            {
+                Match m = Regex.Match(line, @"^\s*SET\s+([A-Za-z0-9_\-]+)\s");
+                if (m.Success && IsGraphicsCVar(m.Groups[1].Value)) { dropped++; continue; }
+                b.AppendLine(line);
+                if (m.Success) kept++;
+            }
+            return b.ToString();
+        }
+
         public static bool IsExcluded(string fileName)
         {
             foreach (string n in ExcludeNames)
@@ -241,25 +290,26 @@ namespace WowAddonManager
         }
 
         // ── zip ─────────────────────────────────────────────────────
-        static List<string> CollectFiles(string root, bool skipRootConfigWtf)
+        static List<string> CollectFiles(string root)
         {
             List<string> result = new List<string>();
             if (!Directory.Exists(root)) return result;
-            string rootConfig = Path.Combine(root, "Config.wtf");
 
             foreach (string f in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
             {
                 if (IsExcluded(Path.GetFileName(f))) continue;
-                if (skipRootConfigWtf && string.Equals(f, rootConfig, StringComparison.OrdinalIgnoreCase)) continue;
                 result.Add(f);
             }
             return result;
         }
 
-        public static int CreateZip(string baseDir, string destZip, bool skipRootConfigWtf,
+        /// <param name="filterConfigPath">
+        /// 이 경로의 파일은 그래픽 줄을 빼고 담는다 (Config.wtf). null 이면 전부 그대로.
+        /// </param>
+        public static int CreateZip(string baseDir, string destZip, string filterConfigPath,
                                     string label, Reporter report)
         {
-            List<string> files = CollectFiles(baseDir, skipRootConfigWtf);
+            List<string> files = CollectFiles(baseDir);
             if (files.Count == 0) return 0;
 
             string baseFull = Path.GetFullPath(baseDir).TrimEnd('\\') + "\\";
@@ -343,14 +393,17 @@ namespace WowAddonManager
                 report("=== " + f.Name + " — 애드온 " + f.AddOnCount + "개", 0);
 
                 string addonsZip = f.Name + "-AddOns.zip";
-                int n = CreateZip(f.AddOnsPath, Path.Combine(o.OutputDir, addonsZip), false, "AddOns", report);
+                int n = CreateZip(f.AddOnsPath, Path.Combine(o.OutputDir, addonsZip), null, "AddOns", report);
                 report("  애드온 " + n.ToString("N0") + " 파일 → " + addonsZip + Size(Path.Combine(o.OutputDir, addonsZip)), 100);
 
                 string wtfZip = null;
                 if (o.IncludeSettings && Directory.Exists(f.WtfPath))
                 {
                     wtfZip = f.Name + "-WTF.zip";
-                    int w = CreateZip(f.WtfPath, Path.Combine(o.OutputDir, wtfZip), !o.IncludeGraphicsConfig, "WTF", report);
+                    // 그래픽을 빼더라도 Config.wtf 자체는 담는다 (사운드·이름표 같은 개인 설정이 같이 들어 있다)
+                    string cfg = Path.Combine(f.WtfPath, "Config.wtf");
+                    int w = CreateZip(f.WtfPath, Path.Combine(o.OutputDir, wtfZip),
+                        (o.IncludeGraphicsConfig || !File.Exists(cfg)) ? null : cfg, "WTF", report);
                     if (w == 0) wtfZip = null;
                     else report("  설정 " + w.ToString("N0") + " 파일 → " + wtfZip + Size(Path.Combine(o.OutputDir, wtfZip)), 100);
                 }
@@ -490,12 +543,12 @@ namespace WowAddonManager
                 {
                     if (Directory.Exists(addOns))
                     {
-                        int n = CreateZip(addOns, Path.Combine(backupDir, name + "-AddOns.zip"), false, "backup", report);
+                        int n = CreateZip(addOns, Path.Combine(backupDir, name + "-AddOns.zip"), null, "backup", report);
                         if (n > 0) report("  백업 " + n.ToString("N0") + " 파일 → " + name + "-AddOns.zip", 100);
                     }
                     if (o.IncludeSettings && Directory.Exists(wtf))
                     {
-                        int n = CreateZip(wtf, Path.Combine(backupDir, name + "-WTF.zip"), false, "backup", report);
+                        int n = CreateZip(wtf, Path.Combine(backupDir, name + "-WTF.zip"), null, "backup", report);
                         if (n > 0) report("  백업 " + n.ToString("N0") + " 파일 → " + name + "-WTF.zip", 100);
                     }
                 }

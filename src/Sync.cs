@@ -420,24 +420,40 @@ namespace WowAddonManager
         /// </summary>
         public static int PackBundle(string exportDir, string destFile, Reporter report)
         {
-            string[] files = Directory.GetFiles(exportDir, "*", SearchOption.AllDirectories);
-            if (files.Length == 0) throw new IOException("묶을 내용이 없습니다.");
+            if (!File.Exists(Path.Combine(exportDir, ManifestName)))
+                throw new IOException("묶을 내용이 없습니다.");
 
-            string baseDir = Path.GetFullPath(exportDir).TrimEnd('\\') + "\\";
+            // 작업 폴더에는 지난번에 내보낸 다른 버전이 남아 있을 수 있다.
+            // manifest 가 가리키는 것만 담아야 꾸러미가 쓸데없이 커지지 않는다.
+            Manifest m = ReadManifest(exportDir);
+            List<string> rels = new List<string>();
+            rels.Add(ManifestName);
+            foreach (KeyValuePair<string, FlavorPack> kv in m.Flavors)
+            {
+                FlavorPack p = kv.Value;
+                if (p.WtfZip.Length > 0) rels.Add(p.WtfZip);
+                if (p.IsLegacy && p.LegacyAddOnsZip.Length > 0) rels.Add(p.LegacyAddOnsZip);
+                foreach (AddonEntry e in p.Addons) rels.Add(e.Zip);
+            }
+
             Directory.CreateDirectory(Path.GetDirectoryName(destFile));
             if (File.Exists(destFile)) File.Delete(destFile);
 
+            int n = 0;
             using (ZipArchive zip = ZipFile.Open(destFile, ZipArchiveMode.Create))
             {
-                for (int i = 0; i < files.Length; i++)
+                for (int i = 0; i < rels.Count; i++)
                 {
-                    string rel = Path.GetFullPath(files[i]).Substring(baseDir.Length).Replace('\\', '/');
-                    zip.CreateEntryFromFile(files[i], rel, CompressionLevel.NoCompression);
-                    if (report != null && (i % 20 == 0 || i == files.Length - 1))
-                        report(null, (int)((i + 1) * 100L / files.Length));
+                    string rel = rels[i].Replace('\\', '/');
+                    string full = Path.Combine(exportDir, rel.Replace('/', '\\'));
+                    if (!File.Exists(full)) continue;
+                    zip.CreateEntryFromFile(full, rel, CompressionLevel.NoCompression);
+                    n++;
+                    if (report != null && (i % 20 == 0 || i == rels.Count - 1))
+                        report(null, (int)((i + 1) * 100L / rels.Count));
                 }
             }
-            return files.Length;
+            return n;
         }
 
         /// <summary>묶음 파일을 폴더로 푼다</summary>
@@ -493,19 +509,50 @@ namespace WowAddonManager
             if (!File.Exists(wtfZipPath)) return ids;
             try
             {
-                using (ZipArchive z = ZipFile.OpenRead(wtfZipPath))
-                    foreach (ZipArchiveEntry e in z.Entries)
-                    {
-                        string[] parts = e.FullName.Split('/');
-                        if (parts.Length >= 2 &&
-                            string.Equals(parts[0], "Account", StringComparison.OrdinalIgnoreCase) &&
-                            parts[1].Length > 0 && parts[1].IndexOf('#') > 0 &&
-                            !ids.Contains(parts[1]))
-                            ids.Add(parts[1]);
-                    }
+                using (ZipArchive z = ZipFile.OpenRead(wtfZipPath)) ScanAccounts(z, ids);
             }
             catch { }
             return ids;
+        }
+
+        /// <summary>
+        /// 꾸러미(.wam) 안에 든 wtf.zip 에서 바로 계정 번호를 읽는다.
+        /// 풀기 전에도 계정 폴더 번호가 다른지 알 수 있어야 한다.
+        /// </summary>
+        public static List<string> AccountsInBundle(string bundleFile, string wtfEntry)
+        {
+            List<string> ids = new List<string>();
+            if (!File.Exists(bundleFile) || string.IsNullOrEmpty(wtfEntry)) return ids;
+            try
+            {
+                using (ZipArchive outer = ZipFile.OpenRead(bundleFile))
+                {
+                    ZipArchiveEntry we = outer.GetEntry(wtfEntry.Replace('\\', '/'));
+                    if (we == null) return ids;
+                    using (MemoryStream ms = new MemoryStream())
+                    {
+                        using (Stream src = we.Open()) src.CopyTo(ms);
+                        ms.Position = 0;
+                        using (ZipArchive inner = new ZipArchive(ms, ZipArchiveMode.Read))
+                            ScanAccounts(inner, ids);
+                    }
+                }
+            }
+            catch { }
+            return ids;
+        }
+
+        static void ScanAccounts(ZipArchive z, List<string> ids)
+        {
+            foreach (ZipArchiveEntry e in z.Entries)
+            {
+                string[] parts = e.FullName.Split('/');
+                if (parts.Length >= 2 &&
+                    string.Equals(parts[0], "Account", StringComparison.OrdinalIgnoreCase) &&
+                    parts[1].Length > 0 && parts[1].IndexOf('#') > 0 &&
+                    !ids.Contains(parts[1]))
+                    ids.Add(parts[1]);
+            }
         }
 
         public static List<string> AccountsOnDisk(string wtfPath)

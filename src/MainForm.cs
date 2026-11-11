@@ -1598,23 +1598,21 @@ namespace WowAddonManager
                 foreach (KeyValuePair<string, FlavorPack> kv in mi.Flavors)
                 {
                     FlavorPack p = kv.Value;
-                    List<string> zips = new List<string>();
-                    if (p.WtfZip.Length > 0) zips.Add(p.WtfZip);
-                    if (p.IsLegacy) zips.Add(p.LegacyAddOnsZip);
-                    foreach (AddonEntry e in p.Addons) zips.Add(e.Zip);
-
-                    long bytes = 0;      // 파일 하나라 버전별로 나눌 수 없다
-                    total = 0;
-                    try { total = new FileInfo(fldSourceDir.Value).Length; }
-                    catch { }
+                    long bytes = p.WtfBytes;                 // 원본 기준 크기
+                    foreach (AddonEntry e in p.Addons) bytes += e.Bytes;
+                    total += bytes;
                     cardInstall.Rows.Add(new string[] {
                         VersionNames.Friendly(kv.Key),
                         "애드온 " + p.FolderCount + "개",
-                        WowCore.HumanSize(bytes) });
+                        bytes > 0 ? WowCore.HumanSize(bytes) : "—" });
                 }
             }
 
-            cardInstall.FootLeft = cardInstall.Rows.Count > 0 ? "파일 합계" : "";
+            long fileSize = 0;
+            try { fileSize = new FileInfo(fldSourceDir.Value).Length; }
+            catch { }
+            cardInstall.FootLeft = cardInstall.Rows.Count > 0
+                ? "파일 크기 " + WowCore.HumanSize(fileSize) + " · 원본 합계" : "";
             cardInstall.FootRight = WowCore.HumanSize(total);
             cardInstall.Size = new Size(pnlInstall.Width, cardInstall.NeededHeight);
             cardInstall.Invalidate();
@@ -1632,8 +1630,7 @@ namespace WowAddonManager
                 FlavorPack p;
                 if (!mi.Flavors.TryGetValue(f.Name, out p) || p.WtfZip.Length == 0) continue;
 
-                List<string> src = Sync.AccountsInZip(
-                    Path.Combine(fldSourceDir.Value, p.WtfZip.Replace('/', '\\')));
+                List<string> src = Sync.AccountsInBundle(fldSourceDir.Value, p.WtfZip);
                 List<string> dst = Sync.AccountsOnDisk(Path.Combine(f.Path, "WTF"));
                 if (src.Count != 1 || dst.Count != 1) continue;
                 if (string.Equals(src[0], dst[0], StringComparison.OrdinalIgnoreCase)) continue;
@@ -1864,29 +1861,36 @@ namespace WowAddonManager
             o.SourceAccountId = srcAccountId;
             o.TargetAccountId = dstAccountId;
 
-            // 무엇이 바뀌는지 먼저 보여준다
+            // 미리보기는 꾸러미 안을 들여다봐야 하므로 먼저 푼다
+            string bundleIn = fldSourceDir.Value;
+            Log("");
+            Log("설치 — " + bundleIn + " → " + o.WowPath);
+            Status("파일 푸는 중…");
+            Run(delegate (Reporter rep)
+                {
+                    rep("파일 푸는 중…", 0);
+                    Sync.UnpackBundle(bundleIn, unpacked, rep);
+                },
+                null, false, delegate { ContinueInstall(o, mi); });
+        }
+
+        /// <summary>꾸러미를 푼 뒤 — 무엇이 바뀌는지 보여주고 설치한다</summary>
+        void ContinueInstall(InstallOptions o, Manifest mi)
+        {
             InstallPlan plan;
-            try { o.SourceDir = unpacked; plan = Sync.Preview(o, mi); }
+            try { plan = Sync.Preview(o, mi); }
             catch (Exception ex) { Info("미리보기를 만들지 못했습니다.\n\n" + ex.Message); return; }
 
             using (PreviewForm dlg = new PreviewForm(plan, o))
             {
                 try { dlg.Icon = Icon; }
                 catch { }
-                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                if (dlg.ShowDialog(this) != DialogResult.OK) { Status("취소했습니다."); return; }
             }
 
             lastOutputDir = o.BackupRoot;
-            Log("");
-            Log("설치 — " + o.SourceDir + " → " + o.WowPath);
             Status("설치하는 중…");
-            string bundleIn = fldSourceDir.Value;
-            Run(delegate (Reporter rep)
-                {
-                    rep("파일 푸는 중…", 0);
-                    Sync.UnpackBundle(bundleIn, unpacked, rep);
-                    Sync.Install(o, rep);
-                },
+            Run(delegate (Reporter rep) { Sync.Install(o, rep); },
                 "설치가 끝났습니다.\n\n와우를 실행해 캐릭터 선택 화면의 'AddOns' 에서 목록을 확인하세요.",
                 false);
         }
@@ -1938,6 +1942,7 @@ namespace WowAddonManager
                 {
                     BeginInvoke((MethodInvoker)delegate
                     {
+                        worker = null;   // 이어서 할 일이 '이미 진행 중'에 막히지 않게
                         SetBusy(false);
                         if (error != null)
                         {
@@ -1984,6 +1989,7 @@ namespace WowAddonManager
             tabs.Enabled = !busy;
             pnlExport.Enabled = !busy;
             pnlInstall.Enabled = !busy;
+            if (pnlSeg != null) pnlSeg.Enabled = !busy;
             this.busy = busy;
             bar.Visible = busy;
             Cursor = busy ? Cursors.AppStarting : Cursors.Default;

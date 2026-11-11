@@ -29,16 +29,16 @@ namespace WowAddonManager
 
         // 내용
         TabStrip tabs;
-        Panel pnlExport, pnlInstall, pnlAddons;
+        Panel pnlExport, pnlInstall, pnlAddons, pnlSeg;
         Label lblExpDesc, lblInsDesc, lblInsInfo, lblHint;
         Field fldExportDir, fldSourceDir;
         FlatBtn btnExportDir, btnSourceDir, btnPrimary, btnOpenFolder;
         Check chkExpSettings, chkExpGraphics, chkDeep;
         Check chkInsSettings, chkInsClean, chkInsBackup, chkMapAccount;
         string srcAccountId = "", dstAccountId = "";
-        ListView lvAddons;
+        DarkListView lvAddons;
         Panel pnlBackup;
-        ListView lvBackup;
+        DarkListView lvBackup;
         Label lblBackupNote;
         Check chkRestoreSettings;
         FlatBtn btnRestore, btnDeleteBackup, btnBackupFolder;
@@ -64,13 +64,15 @@ namespace WowAddonManager
         // 상태
         Label lblStatus;
         Bar bar;
-        TextBox txtLog;
+        DarkTextBox txtLog;
 
         Thread worker;
         Settings settings = new Settings();
         ReleaseInfo pendingUpdate;
         bool logOpen;
         int tab;
+        int fileMode;                 // 0 내보내기, 1 설치
+        FlatBtn btnSegExport, btnSegInstall;
         string lastOutputDir;
 
         /// <summary>
@@ -127,6 +129,7 @@ namespace WowAddonManager
             tips.SetToolTip(chkInsClean, "대상 PC에만 있던 애드온까지 지웁니다.");
             tips.SetToolTip(fldSearch.Box, "애드온 이름이나 폴더명으로 거릅니다");
 
+            int.TryParse(settings.Get("fileMode", "0"), out fileMode);
             SetTab(int.Parse(settings.Get("tab", "0")));
             Shown += delegate { Detect(false); StartSilentUpdateCheck(); };
             FormClosing += delegate { SaveSettings(); CleanupOnExit(); };
@@ -431,7 +434,7 @@ namespace WowAddonManager
         {
             tabs = new TabStrip();
             tabs.Dock = DockStyle.Top;
-            tabs.Items = new string[] { "내보내기", "설치", "애드온 목록", "백업", "클라우드" };
+            tabs.Items = new string[] { "파일로 주고받기", "애드온 목록", "백업", "클라우드" };
             tabs.SelectedChanged += delegate { SetTab(tabs.Selected); };
             pnlMain.Controls.Add(tabs);
         }
@@ -454,7 +457,7 @@ namespace WowAddonManager
             btnPrimary.Font = Theme.H2;
             btnPrimary.Size = new Size(168, 38);
             btnPrimary.Location = new Point(22, 14);
-            btnPrimary.Click += delegate { if (tab == 0) StartExport(); else StartInstall(); };
+            btnPrimary.Click += delegate { if (fileMode == 0) StartExport(); else StartInstall(); };
             pnlFooter.Controls.Add(btnPrimary);
 
             btnOpenFolder = new FlatBtn();
@@ -494,14 +497,37 @@ namespace WowAddonManager
             pnlContent = new Panel();
             pnlContent.Dock = DockStyle.Fill;
             pnlContent.BackColor = Theme.Panel;
-            pnlContent.Padding = new Padding(22, 20, 22, 10);
+            pnlContent.Padding = new Padding(22, 8, 22, 8);
             pnlMain.Controls.Add(pnlContent);
+
+            pnlSeg = new Panel();
+            pnlSeg.Dock = DockStyle.Top;
+            pnlSeg.Height = 38;
+            pnlSeg.BackColor = Theme.Panel;
+            pnlContent.Controls.Add(pnlSeg);
+
+            btnSegExport = new FlatBtn();
+            btnSegExport.Text = "내보내기";
+            btnSegExport.Size = new Size(108, 28);
+            btnSegExport.Location = new Point(0, 2);
+            btnSegExport.Click += delegate { SetFileMode(0); };
+            pnlSeg.Controls.Add(btnSegExport);
+
+            btnSegInstall = new FlatBtn();
+            btnSegInstall.Text = "설치";
+            btnSegInstall.Size = new Size(108, 28);
+            btnSegInstall.Location = new Point(114, 2);
+            btnSegInstall.Click += delegate { SetFileMode(1); };
+            pnlSeg.Controls.Add(btnSegInstall);
 
             BuildExportPanel();
             BuildInstallPanel();
             BuildAddonsPanel();
             BuildBackupPanel();
             BuildCloudPanel();
+
+            // Dock 은 자식 색인이 클수록 바깥쪽에 자리를 잡는다 → 전환 띠가 가장 커야 위에 붙는다
+            pnlContent.Controls.SetChildIndex(pnlSeg, pnlContent.Controls.Count - 1);
         }
 
         Label Title(string text, Panel parent)
@@ -537,11 +563,11 @@ namespace WowAddonManager
             pnlExport.BackColor = Theme.Panel;
             pnlContent.Controls.Add(pnlExport);
 
-            Title("내보내기", pnlExport);
+            Title("파일로 내보내기", pnlExport);
 
             lblExpDesc = new Label();
-            lblExpDesc.Text = "애드온과 개인 설정을 한 폴더에 담습니다. 키바인드 · 매크로 · 인터페이스 배치 ·\n" +
-                              "사운드 · 이름표까지 그대로 따라가고, 그래픽과 해상도만 빠집니다.";
+            lblExpDesc.Text = "애드온과 개인 설정을 파일 하나로 묶습니다. 키바인드 · 매크로 · 인터페이스 배치 ·\n" +
+                              "사운드 · 이름표까지 따라가고, 그래픽과 해상도만 빠집니다.";
             lblExpDesc.AutoSize = false;
             lblExpDesc.Location = new Point(0, 30);
             lblExpDesc.Size = new Size(620, 42);
@@ -549,11 +575,11 @@ namespace WowAddonManager
             lblExpDesc.BackColor = Theme.Panel;
             pnlExport.Controls.Add(lblExpDesc);
 
-            Caption("저장 위치", new Point(0, 84), pnlExport);
+            Caption("저장할 파일", new Point(0, 84), pnlExport);
 
             fldExportDir = new Field();
             fldExportDir.Location = new Point(0, 104);
-            fldExportDir.Value = settings.Get("exportDir", AppInfo.DefaultExportRoot);
+            fldExportDir.Value = settings.Get("bundleFile", AppInfo.DefaultBundleFile);
             EnableFolderDrop(fldExportDir);
             pnlExport.Controls.Add(fldExportDir);
 
@@ -563,8 +589,19 @@ namespace WowAddonManager
             btnExportDir.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnExportDir.Click += delegate
             {
-                string d = PickFolder("애드온과 설정을 저장할 폴더", fldExportDir.Value);
-                if (d != null) fldExportDir.Value = d;
+                using (SaveFileDialog d = new SaveFileDialog())
+                {
+                    d.Title = "어디에 저장할까요?";
+                    d.Filter = "애드온 꾸러미 (*" + Sync.BundleExt + ")|*" + Sync.BundleExt;
+                    d.FileName = Path.GetFileName(fldExportDir.Value);
+                    try
+                    {
+                        string dir = Path.GetDirectoryName(fldExportDir.Value);
+                        if (Directory.Exists(dir)) d.InitialDirectory = dir;
+                    }
+                    catch { }
+                    if (d.ShowDialog(this) == DialogResult.OK) fldExportDir.Value = d.FileName;
+                }
             };
             pnlExport.Controls.Add(btnExportDir);
 
@@ -607,10 +644,10 @@ namespace WowAddonManager
             pnlInstall.Visible = false;
             pnlContent.Controls.Add(pnlInstall);
 
-            Title("설치", pnlInstall);
+            Title("파일에서 설치", pnlInstall);
 
             lblInsDesc = new Label();
-            lblInsDesc.Text = "내보내기로 만든 폴더를 골라 이 PC에 그대로 설치합니다.\n" +
+            lblInsDesc.Text = "내보내기로 만든 파일을 골라 이 PC에 그대로 설치합니다.\n" +
                               "와우는 완전히 종료해 두세요.";
             lblInsDesc.AutoSize = false;
             lblInsDesc.Location = new Point(0, 30);
@@ -619,11 +656,11 @@ namespace WowAddonManager
             lblInsDesc.BackColor = Theme.Panel;
             pnlInstall.Controls.Add(lblInsDesc);
 
-            Caption("가져올 폴더", new Point(0, 84), pnlInstall);
+            Caption("가져올 파일", new Point(0, 84), pnlInstall);
 
             fldSourceDir = new Field();
             fldSourceDir.Location = new Point(0, 104);
-            fldSourceDir.Value = settings.Get("sourceDir", AppInfo.DefaultExportRoot);
+            fldSourceDir.Value = settings.Get("sourceFile", AppInfo.DefaultBundleFile);
             fldSourceDir.Box.TextChanged += delegate { ShowManifest(); };
             EnableFolderDrop(fldSourceDir);
             pnlInstall.Controls.Add(fldSourceDir);
@@ -634,8 +671,19 @@ namespace WowAddonManager
             btnSourceDir.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnSourceDir.Click += delegate
             {
-                string d = PickFolder("내보내기로 만든 폴더 (manifest.json 이 있는 곳)", fldSourceDir.Value);
-                if (d != null) fldSourceDir.Value = d;
+                using (OpenFileDialog d = new OpenFileDialog())
+                {
+                    d.Title = "가져올 꾸러미 파일을 고르세요";
+                    d.Filter = "애드온 꾸러미 (*" + Sync.BundleExt + ")|*" + Sync.BundleExt
+                             + "|모든 파일 (*.*)|*.*";
+                    try
+                    {
+                        string dir = Path.GetDirectoryName(fldSourceDir.Value);
+                        if (Directory.Exists(dir)) d.InitialDirectory = dir;
+                    }
+                    catch { }
+                    if (d.ShowDialog(this) == DialogResult.OK) fldSourceDir.Value = d.FileName;
+                }
             };
             pnlInstall.Controls.Add(btnSourceDir);
 
@@ -668,7 +716,7 @@ namespace WowAddonManager
 
             cardInstall = new SummaryCard();
             cardInstall.Caption = "가져올 내용";
-            cardInstall.Empty = "내보내기로 만든 폴더를 고르세요.";
+            cardInstall.Empty = "내보내기로 만든 .wam 파일을 고르세요.";
             cardInstall.Location = new Point(0, 286);
             pnlInstall.Controls.Add(cardInstall);
 
@@ -693,13 +741,7 @@ namespace WowAddonManager
 
             Title("애드온 목록", pnlAddons);
 
-            lvAddons = new ListView();
-            lvAddons.View = View.Details;
-            lvAddons.FullRowSelect = true;
-            lvAddons.BorderStyle = BorderStyle.None;
-            lvAddons.BackColor = Theme.Field;
-            lvAddons.ForeColor = Theme.Text;
-            lvAddons.OwnerDraw = true;
+            lvAddons = new DarkListView();
             fldSearch = new Field();
             fldSearch.Size = new Size(220, 30);
             fldSearch.Box.Text = "";
@@ -713,41 +755,14 @@ namespace WowAddonManager
             lvAddons.Columns.Add("버전", 100);
             lvAddons.Columns.Add("출처", 110);
 
-            lvAddons.DrawColumnHeader += delegate (object s, DrawListViewColumnHeaderEventArgs e)
-            {
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 25, 31)))
-                    e.Graphics.FillRectangle(b, e.Bounds);
-                using (Pen p = new Pen(Theme.Line))
-                    e.Graphics.DrawLine(p, e.Bounds.X, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
-                TextRenderer.DrawText(e.Graphics, e.Header.Text, Theme.Tiny,
-                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
-                    Theme.TextMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-            };
-            lvAddons.DrawItem += delegate (object s, DrawListViewItemEventArgs e)
-            {
-                bool sel = (e.State & ListViewItemStates.Selected) != 0;
-                using (SolidBrush b = new SolidBrush(sel ? Theme.RowSel
-                        : e.ItemIndex % 2 == 0 ? Theme.Field : Color.FromArgb(15, 17, 22)))
-                    e.Graphics.FillRectangle(b, e.Bounds);
-            };
-            lvAddons.DrawSubItem += delegate (object s, DrawListViewSubItemEventArgs e)
-            {
-                Color c = e.ColumnIndex == 0 ? Theme.Text : Theme.TextDim;
-                TextRenderer.DrawText(e.Graphics, e.SubItem.Text, Theme.Body,
-                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
-                    c, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-            };
+            lvAddons.HookDarkDraw(delegate (int i) { return i == 0 ? Theme.Text : Theme.TextDim; });
             pnlAddons.Controls.Add(lvAddons);
 
             pnlAddons.Resize += delegate
             {
                 fldSearch.Location = new Point(pnlAddons.Width - fldSearch.Width, 0);
                 lvAddons.Size = new Size(pnlAddons.Width, Math.Max(60, pnlAddons.Height - 44));
-                // 마지막 열을 남는 폭까지 늘려 머리글에 빈 칸이 생기지 않게 한다
-                int used = 0;
-                for (int i = 0; i < lvAddons.Columns.Count - 1; i++) used += lvAddons.Columns[i].Width;
-                lvAddons.Columns[lvAddons.Columns.Count - 1].Width =
-                    Math.Max(110, lvAddons.Width - used - 20);
+                lvAddons.StretchLastColumn();
             };
         }
 
@@ -770,14 +785,8 @@ namespace WowAddonManager
             lblBackupNote.BackColor = Theme.Panel;
             pnlBackup.Controls.Add(lblBackupNote);
 
-            lvBackup = new ListView();
-            lvBackup.View = View.Details;
-            lvBackup.FullRowSelect = true;
+            lvBackup = new DarkListView();
             lvBackup.MultiSelect = false;
-            lvBackup.BorderStyle = BorderStyle.None;
-            lvBackup.BackColor = Theme.Field;
-            lvBackup.ForeColor = Theme.Text;
-            lvBackup.OwnerDraw = true;
             lvBackup.Location = new Point(0, 60);
             lvBackup.Columns.Add("시각", 170);
             lvBackup.Columns.Add("포함된 버전", 300);
@@ -787,30 +796,7 @@ namespace WowAddonManager
                 btnRestore.Enabled = lvBackup.SelectedIndices.Count > 0;
                 btnDeleteBackup.Enabled = btnRestore.Enabled;
             };
-            lvBackup.DrawColumnHeader += delegate (object s2, DrawListViewColumnHeaderEventArgs e)
-            {
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 25, 31)))
-                    e.Graphics.FillRectangle(b, e.Bounds);
-                using (Pen p = new Pen(Theme.Line))
-                    e.Graphics.DrawLine(p, e.Bounds.X, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
-                TextRenderer.DrawText(e.Graphics, e.Header.Text, Theme.Tiny,
-                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
-                    Theme.TextMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-            };
-            lvBackup.DrawItem += delegate (object s2, DrawListViewItemEventArgs e)
-            {
-                bool sel = (e.State & ListViewItemStates.Selected) != 0;
-                using (SolidBrush b = new SolidBrush(sel ? Theme.RowSel
-                        : e.ItemIndex % 2 == 0 ? Theme.Field : Color.FromArgb(15, 17, 22)))
-                    e.Graphics.FillRectangle(b, e.Bounds);
-            };
-            lvBackup.DrawSubItem += delegate (object s2, DrawListViewSubItemEventArgs e)
-            {
-                TextRenderer.DrawText(e.Graphics, e.SubItem.Text, Theme.Body,
-                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
-                    e.ColumnIndex == 0 ? Theme.Text : Theme.TextDim,
-                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-            };
+            lvBackup.HookDarkDraw(delegate (int i) { return i == 0 ? Theme.Text : Theme.TextDim; });
             pnlBackup.Controls.Add(lvBackup);
 
             chkRestoreSettings = MakeCheck("개인 설정도 함께 되돌리기", new Point(0, 0), true);
@@ -848,9 +834,7 @@ namespace WowAddonManager
                 int w = pnlBackup.Width, h = pnlBackup.Height;
                 lblBackupNote.Width = w;
                 lvBackup.Size = new Size(w, Math.Max(80, h - 60 - 46));
-                int used = 0;
-                for (int i = 0; i < lvBackup.Columns.Count - 1; i++) used += lvBackup.Columns[i].Width;
-                lvBackup.Columns[lvBackup.Columns.Count - 1].Width = Math.Max(110, w - used - 20);
+                lvBackup.StretchLastColumn();
                 int y = h - 36;
                 chkRestoreSettings.Location = new Point(0, y + 4);
                 btnRestore.Location = new Point(w - 104, y);
@@ -1204,7 +1188,7 @@ namespace WowAddonManager
             string remoteAt = recordRemoteAt;
             if (remoteAt == null)
             {
-                try { remoteAt = Sync.ReadManifest(fldExportDir.Value).ExportedAt; }
+                try { remoteAt = Sync.ReadManifest(AppInfo.WorkExportDir).ExportedAt; }
                 catch { remoteAt = ""; }
             }
             settings.Set("syncRemoteAt", remoteAt);
@@ -1286,7 +1270,7 @@ namespace WowAddonManager
 
         void CloudUpload()
         {
-            string dir = fldExportDir.Value.Trim();
+            string dir = AppInfo.WorkExportDir;
             if (!File.Exists(Path.Combine(dir, Sync.ManifestName)))
             {
                 Info("올릴 꾸러미가 없습니다.\n\n먼저 '내보내기'를 한 번 실행하세요.");
@@ -1301,8 +1285,7 @@ namespace WowAddonManager
 
         void CloudDownload()
         {
-            string dir = fldSourceDir.Value.Trim();
-            if (dir.Length == 0) { Info("'설치' 탭에서 받을 폴더를 먼저 지정하세요."); return; }
+            string dir = AppInfo.CloudCacheDir;
             try { Directory.CreateDirectory(dir); }
             catch (Exception ex) { Info("폴더를 만들 수 없습니다.\n\n" + ex.Message); return; }
 
@@ -1381,7 +1364,7 @@ namespace WowAddonManager
             lnkDetail.Click += delegate { ToggleLog(); };
             pnlStatus.Controls.Add(lnkDetail);
 
-            txtLog = new TextBox();
+            txtLog = new DarkTextBox();
             txtLog.Dock = DockStyle.Bottom;
             txtLog.Height = LogH;
             txtLog.Multiline = true;
@@ -1409,32 +1392,47 @@ namespace WowAddonManager
             Height += logOpen ? LogH : -LogH;
         }
 
+        void SetFileMode(int m)
+        {
+            fileMode = m;
+            settings.Set("fileMode", m.ToString());
+            SetTab(0);
+        }
+
         void SetTab(int t)
         {
-            if (t < 0 || t > 4) t = 0;
+            if (t < 0 || t > 3) t = 0;
             tab = t;
             tabs.Selected = t;
             tabs.Invalidate();
 
-            pnlExport.Visible = t == 0;
-            pnlInstall.Visible = t == 1;
-            pnlAddons.Visible = t == 2;
-            pnlBackup.Visible = t == 3;
-            pnlCloud.Visible = t == 4;
-            if (t == 0) pnlExport.BringToFront();
-            else if (t == 1) pnlInstall.BringToFront();
-            else if (t == 2) pnlAddons.BringToFront();
-            else if (t == 3) pnlBackup.BringToFront();
+            bool file = t == 0;
+            pnlExport.Visible = file && fileMode == 0;
+            pnlInstall.Visible = file && fileMode == 1;
+            pnlAddons.Visible = t == 1;
+            pnlBackup.Visible = t == 2;
+            pnlCloud.Visible = t == 3;
+
+            if (file) { if (fileMode == 0) pnlExport.BringToFront(); else pnlInstall.BringToFront(); }
+            else if (t == 1) pnlAddons.BringToFront();
+            else if (t == 2) pnlBackup.BringToFront();
             else pnlCloud.BringToFront();
 
-            btnPrimary.Visible = t < 2;
-            btnPrimary.Text = t == 0 ? "내보내기 시작" : "설치 시작";
+            if (pnlSeg != null) pnlSeg.Visible = file;
+            btnSegExport.Kind = fileMode == 0 ? BtnKind.Primary : BtnKind.Ghost;
+            btnSegInstall.Kind = fileMode == 1 ? BtnKind.Primary : BtnKind.Ghost;
+            btnSegExport.Invalidate();
+            btnSegInstall.Invalidate();
+
+            btnPrimary.Visible = file;
+            btnPrimary.Kind = BtnKind.Primary;
+            btnPrimary.Text = fileMode == 0 ? "파일로 내보내기" : "파일에서 설치";
             btnOpenFolder.Visible = false;
 
-            if (t == 1) ShowManifest();
-            if (t == 2) RefreshAddons();
-            if (t == 3) RefreshBackups();
-            if (t == 4) RefreshCloud();
+            if (file && fileMode == 1) ShowManifest();
+            if (t == 1) RefreshAddons();
+            if (t == 2) RefreshBackups();
+            if (t == 3) RefreshCloud();
             UpdateHints();
             LayoutFooter();
         }
@@ -1518,9 +1516,9 @@ namespace WowAddonManager
 
             if (fldWow.Value.Length == 0) { lblHint.Text = ""; btnPrimary.Enabled = false; return; }
 
-            if (tab >= 2) lblHint.Text = "";
+            if (tab != 0) lblHint.Text = "";
             else if (sel.Count == 0) lblHint.Text = "왼쪽에서 게임 버전을 하나 이상 선택하세요.";
-            else if (tab == 0) lblHint.Text = "선택한 " + sel.Count + "개 버전, 애드온 " + addons + "개를 묶습니다.";
+            else if (fileMode == 0) lblHint.Text = "선택한 " + sel.Count + "개 버전, 애드온 " + addons + "개를 파일 하나로 묶습니다.";
             else lblHint.Text = "선택한 " + sel.Count + "개 버전에 설치합니다.";
 
             btnPrimary.Enabled = sel.Count > 0;
@@ -1605,17 +1603,10 @@ namespace WowAddonManager
                     if (p.IsLegacy) zips.Add(p.LegacyAddOnsZip);
                     foreach (AddonEntry e in p.Addons) zips.Add(e.Zip);
 
-                    long bytes = 0;
-                    foreach (string z in zips)
-                    {
-                        try
-                        {
-                            string fp = Path.Combine(fldSourceDir.Value, z.Replace('/', '\\'));
-                            if (File.Exists(fp)) bytes += new FileInfo(fp).Length;
-                        }
-                        catch { }
-                    }
-                    total += bytes;
+                    long bytes = 0;      // 파일 하나라 버전별로 나눌 수 없다
+                    total = 0;
+                    try { total = new FileInfo(fldSourceDir.Value).Length; }
+                    catch { }
                     cardInstall.Rows.Add(new string[] {
                         VersionNames.Friendly(kv.Key),
                         "애드온 " + p.FolderCount + "개",
@@ -1674,6 +1665,7 @@ namespace WowAddonManager
                 lvBackup.Items.Add(it);
             }
             lvBackup.EndUpdate();
+            lvBackup.StretchLastColumn();
 
             long total = 0;
             foreach (BackupInfo b in backups) total += b.Bytes;
@@ -1745,6 +1737,7 @@ namespace WowAddonManager
                 lvAddons.Items.Add(it);
             }
             lvAddons.EndUpdate();
+            lvAddons.StretchLastColumn();
         }
 
         void ShowManifest()
@@ -1752,7 +1745,7 @@ namespace WowAddonManager
             if (lblInsInfo == null) return;
             try
             {
-                Manifest mi = Sync.ReadManifest(fldSourceDir.Value);
+                Manifest mi = Sync.PeekBundle(fldSourceDir.Value);
                 List<string> names = new List<string>();
                 foreach (string k in mi.Flavors.Keys) names.Add(VersionList.FlavorName(k));
                 lblInsInfo.ForeColor = Theme.Ok;
@@ -1764,7 +1757,7 @@ namespace WowAddonManager
             catch (FileNotFoundException)
             {
                 lblInsInfo.ForeColor = Theme.TextMuted;
-                lblInsInfo.Text = "내보내기로 만든 폴더를 고르세요. (manifest.json 이 있는 폴더)";
+                lblInsInfo.Text = "내보내기로 만든 " + Sync.BundleExt + " 파일을 고르세요.";
                 UpdateInstallSummary(null);
                 chkMapAccount.Visible = false;
             }
@@ -1783,9 +1776,14 @@ namespace WowAddonManager
             List<Flavor> sel = CheckedFlavors();
             if (sel.Count == 0) { Info("내보낼 버전을 왼쪽에서 선택하세요."); return; }
 
-            string outDir = fldExportDir.Value.Trim();
-            if (outDir.Length == 0) { Info("저장 위치를 지정하세요."); return; }
-            try { Directory.CreateDirectory(outDir); }
+            string bundle = fldExportDir.Value.Trim();
+            if (bundle.Length == 0) { Info("저장할 파일을 지정하세요."); return; }
+            if (!bundle.EndsWith(Sync.BundleExt, StringComparison.OrdinalIgnoreCase))
+                bundle += Sync.BundleExt;
+            fldExportDir.Value = bundle;
+
+            string outDir = AppInfo.WorkExportDir;    // 증분을 위해 작업 폴더는 그대로 둔다
+            try { Directory.CreateDirectory(Path.GetDirectoryName(bundle)); }
             catch (Exception ex) { Info("저장 위치를 만들 수 없습니다.\n\n" + ex.Message); return; }
 
             ExportOptions o = new ExportOptions();
@@ -1807,12 +1805,25 @@ namespace WowAddonManager
             pendingAutoUpload = pendingAutoUpload
                 || (chkAutoUpload != null && chkAutoUpload.Checked
                     && GoogleDrive.IsConfigured && GoogleDrive.IsSignedIn);
-            lastOutputDir = outDir;
+            lastOutputDir = Path.GetDirectoryName(bundle);
+            string bundlePath = bundle;
             Log("");
-            Log("내보내기 — 원본 " + WowCore.HumanSize(raw) + " → " + outDir);
+            Log("내보내기 — 원본 " + WowCore.HumanSize(raw) + " → " + bundlePath);
             Status("내보내는 중…");
-            Run(delegate (Reporter rep) { Sync.Export(o, rep); },
-                "내보내기가 끝났습니다.\n\n이 폴더를 USB·구글드라이브·OneDrive에 두고,\n다른 PC에서 '설치'로 가져오면 됩니다.\n\n" + outDir,
+
+            Run(delegate (Reporter rep)
+                {
+                    Sync.Export(o, rep);
+                    if (!pendingAutoUpload)          // 클라우드로 갈 때는 묶지 않는다
+                    {
+                        rep("파일 하나로 묶는 중…", 0);
+                        int n = Sync.PackBundle(outDir, bundlePath, rep);
+                        rep("묶음 " + n + " 파일 → " + Path.GetFileName(bundlePath)
+                            + " (" + WowCore.HumanSize(new FileInfo(bundlePath).Length) + ")", 100);
+                    }
+                },
+                "내보내기가 끝났습니다.\n\n이 파일을 USB·구글드라이브·OneDrive에 두고,\n"
+                + "다른 PC에서 '설치'로 가져오면 됩니다.\n\n" + bundlePath,
                 true);
         }
 
@@ -1820,7 +1831,7 @@ namespace WowAddonManager
         {
             if (!CheckWow()) return;
             Manifest mi;
-            try { mi = Sync.ReadManifest(fldSourceDir.Value); }
+            try { mi = Sync.PeekBundle(fldSourceDir.Value); }
             catch (Exception ex) { Info(ex.Message); return; }
 
             List<string> names = new List<string>();
@@ -1840,9 +1851,10 @@ namespace WowAddonManager
             List<string> friendly = new List<string>();
             foreach (string n in names) friendly.Add(VersionList.FlavorName(n));
 
+            string unpacked = Path.Combine(AppInfo.CloudCacheDir, "manual");
             InstallOptions o = new InstallOptions();
             o.WowPath = fldWow.Value;
-            o.SourceDir = fldSourceDir.Value;
+            o.SourceDir = unpacked;
             o.FlavorNames = names;
             o.IncludeSettings = chkInsSettings.Checked && mi.Settings;
             o.CleanInstall = chkInsClean.Checked;
@@ -1854,7 +1866,7 @@ namespace WowAddonManager
 
             // 무엇이 바뀌는지 먼저 보여준다
             InstallPlan plan;
-            try { plan = Sync.Preview(o, mi); }
+            try { o.SourceDir = unpacked; plan = Sync.Preview(o, mi); }
             catch (Exception ex) { Info("미리보기를 만들지 못했습니다.\n\n" + ex.Message); return; }
 
             using (PreviewForm dlg = new PreviewForm(plan, o))
@@ -1868,7 +1880,13 @@ namespace WowAddonManager
             Log("");
             Log("설치 — " + o.SourceDir + " → " + o.WowPath);
             Status("설치하는 중…");
-            Run(delegate (Reporter rep) { Sync.Install(o, rep); },
+            string bundleIn = fldSourceDir.Value;
+            Run(delegate (Reporter rep)
+                {
+                    rep("파일 푸는 중…", 0);
+                    Sync.UnpackBundle(bundleIn, unpacked, rep);
+                    Sync.Install(o, rep);
+                },
                 "설치가 끝났습니다.\n\n와우를 실행해 캐릭터 선택 화면의 'AddOns' 에서 목록을 확인하세요.",
                 false);
         }
@@ -1989,8 +2007,9 @@ namespace WowAddonManager
         void SaveSettings()
         {
             settings.Set("wowPath", fldWow.Value);
-            settings.Set("exportDir", fldExportDir.Value);
-            settings.Set("sourceDir", fldSourceDir.Value);
+            settings.Set("bundleFile", fldExportDir.Value);
+            settings.Set("sourceFile", fldSourceDir.Value);
+            settings.Set("fileMode", fileMode.ToString());
             settings.Set("expSettings", chkExpSettings.Checked);
             settings.Set("expGraphics", chkExpGraphics.Checked);
             settings.Set("deepCheck", chkDeep.Checked);

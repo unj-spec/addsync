@@ -102,6 +102,31 @@ namespace WowAddonManager
             }
         }
 
+        /// <summary>증분을 유지하려고 두는 작업 폴더 (사용자가 직접 열 일은 없다)</summary>
+        public static string WorkExportDir
+        {
+            get
+            {
+                string d = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    @"WowAddonManager\work");
+                try { Directory.CreateDirectory(d); }
+                catch { }
+                return d;
+            }
+        }
+
+        /// <summary>'파일로 내보내기' 의 기본 파일 이름</summary>
+        public static string DefaultBundleFile
+        {
+            get
+            {
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    @"WowAddonManager\WowAddons.wam");
+            }
+        }
+
         public static string DefaultExportRoot
         {
             get

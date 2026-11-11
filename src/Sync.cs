@@ -411,6 +411,81 @@ namespace WowAddonManager
             return m;
         }
 
+        // ── 파일 하나로 묶기 / 풀기 ─────────────────────────────
+        public const string BundleExt = ".wam";
+
+        /// <summary>
+        /// 내보낸 폴더를 파일 하나로 묶는다. 안에 든 것이 이미 zip 이라
+        /// 다시 압축하지 않고 담기만 한다 (시간만 걸리고 크기는 거의 그대로다).
+        /// </summary>
+        public static int PackBundle(string exportDir, string destFile, Reporter report)
+        {
+            string[] files = Directory.GetFiles(exportDir, "*", SearchOption.AllDirectories);
+            if (files.Length == 0) throw new IOException("묶을 내용이 없습니다.");
+
+            string baseDir = Path.GetFullPath(exportDir).TrimEnd('\\') + "\\";
+            Directory.CreateDirectory(Path.GetDirectoryName(destFile));
+            if (File.Exists(destFile)) File.Delete(destFile);
+
+            using (ZipArchive zip = ZipFile.Open(destFile, ZipArchiveMode.Create))
+            {
+                for (int i = 0; i < files.Length; i++)
+                {
+                    string rel = Path.GetFullPath(files[i]).Substring(baseDir.Length).Replace('\\', '/');
+                    zip.CreateEntryFromFile(files[i], rel, CompressionLevel.NoCompression);
+                    if (report != null && (i % 20 == 0 || i == files.Length - 1))
+                        report(null, (int)((i + 1) * 100L / files.Length));
+                }
+            }
+            return files.Length;
+        }
+
+        /// <summary>묶음 파일을 폴더로 푼다</summary>
+        public static int UnpackBundle(string bundleFile, string destDir, Reporter report)
+        {
+            if (!File.Exists(bundleFile))
+                throw new FileNotFoundException("파일을 찾을 수 없습니다.\n\n" + bundleFile);
+
+            if (Directory.Exists(destDir))
+            {
+                try { WowCore.DeleteTree(destDir); }
+                catch { }
+            }
+            Directory.CreateDirectory(destDir);
+            int n = WowCore.ExtractZip(bundleFile, destDir, "bundle", report);
+
+            if (!File.Exists(Path.Combine(destDir, ManifestName)))
+                throw new InvalidDataException(
+                    "이 파일은 애드온 꾸러미가 아닙니다.\n" +
+                    "'파일로 내보내기' 로 만든 " + BundleExt + " 파일을 고르세요.");
+            return n;
+        }
+
+        /// <summary>묶음 파일 안의 manifest 만 들여다본다 (풀지 않고)</summary>
+        public static Manifest PeekBundle(string bundleFile)
+        {
+            string temp = Path.Combine(Path.GetTempPath(), "wam-peek");
+            try
+            {
+                if (Directory.Exists(temp)) Directory.Delete(temp, true);
+                Directory.CreateDirectory(temp);
+
+                using (ZipArchive z = ZipFile.OpenRead(bundleFile))
+                    foreach (ZipArchiveEntry e in z.Entries)
+                        if (string.Equals(e.FullName, ManifestName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            e.ExtractToFile(Path.Combine(temp, ManifestName), true);
+                            return ReadManifest(temp);
+                        }
+                throw new InvalidDataException("꾸러미 정보가 없는 파일입니다.");
+            }
+            finally
+            {
+                try { if (Directory.Exists(temp)) Directory.Delete(temp, true); }
+                catch { }
+            }
+        }
+
         // ── 계정 폴더 번호 ──────────────────────────────────────
         public static List<string> AccountsInZip(string wtfZipPath)
         {

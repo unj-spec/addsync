@@ -8,7 +8,7 @@ namespace WowAddonManager
     /// <summary>설치하면 무엇이 바뀌는지 먼저 보여준다</summary>
     public class PreviewForm : Form
     {
-        ListView lv;
+        DarkListView lv;
 
         public PreviewForm(InstallPlan plan, InstallOptions o)
         {
@@ -46,43 +46,19 @@ namespace WowAddonManager
             Controls.Add(head);
 
             // ── 목록 ────────────────────────────────────────────
-            lv = new ListView();
+            lv = new DarkListView();
             lv.Dock = DockStyle.Fill;
-            lv.View = View.Details;
-            lv.FullRowSelect = true;
-            lv.BorderStyle = BorderStyle.None;
-            lv.BackColor = Theme.Field;
-            lv.ForeColor = Theme.Text;
-            lv.OwnerDraw = true;
             lv.Columns.Add("상태", 110);
             lv.Columns.Add("애드온", 450);
 
-            lv.DrawColumnHeader += delegate (object s, DrawListViewColumnHeaderEventArgs e)
-            {
-                using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 25, 31)))
-                    e.Graphics.FillRectangle(b, e.Bounds);
-                using (Pen p = new Pen(Theme.Line))
-                    e.Graphics.DrawLine(p, e.Bounds.X, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
-                TextRenderer.DrawText(e.Graphics, e.Header.Text, Theme.Tiny,
-                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
-                    Theme.TextMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-            };
-            lv.DrawItem += delegate (object s, DrawListViewItemEventArgs e)
-            {
-                using (SolidBrush b = new SolidBrush(e.ItemIndex % 2 == 0
-                        ? Theme.Field : Color.FromArgb(15, 17, 22)))
-                    e.Graphics.FillRectangle(b, e.Bounds);
-            };
-            lv.DrawSubItem += delegate (object s, DrawListViewSubItemEventArgs e)
-            {
-                Color c = e.ColumnIndex == 0
-                    ? (Color)e.Item.Tag
-                    : Theme.Text;
-                Font f = e.ColumnIndex == 0 ? Theme.BodyBold : Theme.Body;
-                TextRenderer.DrawText(e.Graphics, e.SubItem.Text, f,
-                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
-                    c, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-            };
+            lv.HookDarkDraw(
+                delegate (ListViewItem it, int i)
+                {
+                    if (i != 0) return Theme.Text;
+                    return it.Tag is Color ? (Color)it.Tag : Theme.Text;
+                },
+                delegate (int i) { return i == 0 ? Theme.BodyBold : Theme.Body; });
+            lv.Resize += delegate { lv.StretchLastColumn(); };
             Controls.Add(lv);
             lv.BringToFront();
 

@@ -640,6 +640,151 @@ namespace WowAddonManager
         }
     }
 
+    /// <summary>
+    /// 어두운 테마에 맞춘 목록.
+    /// - 윈도우에 '어두운 탐색기' 테마를 걸어 스크롤바까지 어둡게 만든다
+    /// - 이중 버퍼를 켜서 스크롤할 때 줄이 깨지거나 칸이 비는 것을 막는다
+    /// </summary>
+    /// <summary>스크롤 막대까지 어두운 글상자</summary>
+    public class DarkTextBox : TextBox
+    {
+        [System.Runtime.InteropServices.DllImport("uxtheme.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        static extern int SetWindowTheme(IntPtr hWnd, string app, string id);
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            try { SetWindowTheme(Handle, "DarkMode_Explorer", null); }
+            catch { }
+        }
+    }
+
+    public class DarkListView : ListView
+    {
+        [System.Runtime.InteropServices.DllImport("uxtheme.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        static extern int SetWindowTheme(IntPtr hWnd, string app, string id);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wp, IntPtr lp);
+
+        const int LVM_FIRST = 0x1000;
+        const int LVM_SETEXTENDEDLISTVIEWSTYLE = LVM_FIRST + 54;
+        const int LVS_EX_DOUBLEBUFFER = 0x00010000;
+        const int LVM_GETHEADER = LVM_FIRST + 31;
+
+        public DarkListView()
+        {
+            View = View.Details;
+            FullRowSelect = true;
+            BorderStyle = BorderStyle.None;
+            OwnerDraw = true;
+            BackColor = Theme.Field;
+            ForeColor = Theme.Text;
+            HeaderStyle = ColumnHeaderStyle.Nonclickable;
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            try
+            {
+                SetWindowTheme(Handle, "DarkMode_Explorer", null);
+                SendMessage(Handle, LVM_SETEXTENDEDLISTVIEWSTYLE,
+                    (IntPtr)LVS_EX_DOUBLEBUFFER, (IntPtr)LVS_EX_DOUBLEBUFFER);
+
+                // 머리글 오른쪽 자투리(세로 막대 위)는 우리가 그리지 않는 구역이라
+                // 밝은 기본 테마로 남는다. 머리글 창에 어두운 테마를 따로 입힌다.
+                IntPtr head = SendMessage(Handle, LVM_GETHEADER, IntPtr.Zero, IntPtr.Zero);
+                if (head != IntPtr.Zero) SetWindowTheme(head, "DarkMode_ItemsView", null);
+            }
+            catch { }
+        }
+
+        /// <summary>마지막 열을 남는 폭까지 늘려 머리글에 빈 칸이 생기지 않게 한다</summary>
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        static extern int GetWindowLong(IntPtr hWnd, int index);
+
+        const int GWL_STYLE = -16;
+        const int WS_VSCROLL = 0x00200000;
+
+        bool HasVScroll
+        {
+            get
+            {
+                if (!IsHandleCreated) return false;
+                try { return (GetWindowLong(Handle, GWL_STYLE) & WS_VSCROLL) != 0; }
+                catch { return false; }
+            }
+        }
+
+        /// <summary>
+        /// 마지막 열을 남는 폭까지 늘린다. ListView 의 ClientSize 는 세로 스크롤 막대를
+        /// 빼 주지 않으므로 직접 덜어 낸다. 안 그러면 가로 막대가 생기고 오른쪽 아래에
+        /// 흰 네모가 남는다.
+        /// </summary>
+        public void StretchLastColumn()
+        {
+            if (Columns.Count == 0) return;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                int used = 0;
+                for (int i = 0; i < Columns.Count - 1; i++) used += Columns[i].Width;
+                int rest = ClientSize.Width - used - 4;
+                if (HasVScroll) rest -= SystemInformation.VerticalScrollBarWidth;
+                Columns[Columns.Count - 1].Width = Math.Max(90, rest);
+            }
+        }
+
+        /// <summary>어두운 머리글</summary>
+        public void HookDarkDraw(Func<int, Color> columnColor)
+        {
+            Func<ListViewItem, int, Color> f = null;
+            if (columnColor != null)
+                f = delegate (ListViewItem it, int i) { return columnColor(i); };
+            HookDarkDraw(f, null);
+        }
+
+        /// <summary>어두운 머리글 — 줄마다 색과 글꼴을 달리할 수 있다</summary>
+        public void HookDarkDraw(Func<ListViewItem, int, Color> cellColor, Func<int, Font> cellFont)
+        {
+            DrawColumnHeader += delegate (object s, DrawListViewColumnHeaderEventArgs e)
+            {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 25, 31)))
+                    e.Graphics.FillRectangle(b, e.Bounds);
+                using (Pen p = new Pen(Theme.Line))
+                    e.Graphics.DrawLine(p, e.Bounds.X, e.Bounds.Bottom - 1,
+                                        e.Bounds.Right, e.Bounds.Bottom - 1);
+                TextRenderer.DrawText(e.Graphics, e.Header.Text, Theme.Tiny,
+                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
+                    Theme.TextMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+            };
+
+            DrawItem += delegate (object s, DrawListViewItemEventArgs e)
+            {
+                bool sel = (e.State & ListViewItemStates.Selected) != 0;
+                Color bg = sel ? Theme.RowSel
+                    : e.ItemIndex % 2 == 0 ? Theme.Field : Color.FromArgb(15, 17, 22);
+                using (SolidBrush b = new SolidBrush(bg)) e.Graphics.FillRectangle(b, e.Bounds);
+
+                // 줄 전체를 여기서 그린다. 칸별로 그리면 스크롤할 때 빈 칸이 생긴다.
+                int x = e.Bounds.X;
+                for (int i = 0; i < Columns.Count && i < e.Item.SubItems.Count; i++)
+                {
+                    int w = Columns[i].Width;
+                    TextRenderer.DrawText(e.Graphics, e.Item.SubItems[i].Text,
+                        cellFont != null ? cellFont(i) : Theme.Body,
+                        new Rectangle(x + 10, e.Bounds.Y, w - 12, e.Bounds.Height),
+                        cellColor != null ? cellColor(e.Item, i) : Theme.Text,
+                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                    x += w;
+                }
+            };
+
+            // 칸 단위 그리기는 쓰지 않는다 (줄 단위로 이미 그렸다)
+            DrawSubItem += delegate (object s, DrawListViewSubItemEventArgs e) { };
+        }
+    }
+
     /// <summary>글자 링크</summary>
     public class LinkText : Label
     {

@@ -73,6 +73,12 @@ namespace WowAddonManager
         int tab;
         string lastOutputDir;
 
+        /// <summary>
+        /// 꾸러미를 만드는 규칙의 판. 규칙이 바뀌면(예: 설정에서 걸러내는 항목이 달라지면)
+        /// 드라이브에 올라가 있는 것이 낡은 것이 되므로 다시 올리게 한다.
+        /// </summary>
+        const int BundleRule = 2;
+
         const int LogH = 150;
         const int SideW = 232;
 
@@ -1117,6 +1123,16 @@ namespace WowAddonManager
 
             bool first = lastSig.Length == 0;
             bool localChanged = !first && localSig != lastSig;
+
+            // 프로그램이 꾸러미 만드는 방식을 바꿨다면 올라가 있는 것은 낡은 것이다
+            int lastRule;
+            if (!int.TryParse(settings.Get("bundleRule", "1"), out lastRule)) lastRule = 1;
+            bool ruleChanged = !first && lastRule != BundleRule;
+            if (ruleChanged)
+            {
+                Log("꾸러미 규칙이 바뀌어 다시 올립니다 (" + lastRule + " → " + BundleRule + ")");
+                localChanged = true;
+            }
             bool remoteChanged = remote != null && remote.Exists && remote.ExportedAt != lastAt;
 
             // 드라이브가 비었으면 올릴 수밖에 없다
@@ -1194,6 +1210,7 @@ namespace WowAddonManager
             settings.Set("syncRemoteAt", remoteAt);
             settings.Set("syncLocalSig",
                 Sync.LocalSignature(CheckedFlavors(), chkExpSettings.Checked));
+            settings.Set("bundleRule", BundleRule.ToString());
             settings.Save();
             RefreshCloud();
         }
@@ -1260,6 +1277,8 @@ namespace WowAddonManager
                 Info("왼쪽에서 올릴 게임 버전을 하나 이상 선택하세요.");
                 return;
             }
+            recordAfterJob = true;
+            recordRemoteAt = null;
             pendingAutoUpload = true;
             SetTab(0);
             StartExport();

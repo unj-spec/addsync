@@ -35,6 +35,25 @@ namespace WowAddonManager
         static string accessToken = "";
         static DateTime accessExpires = DateTime.MinValue;
 
+        /// <summary>이 프로그램이 도는 동안에만 들고 있는 갱신 토큰</summary>
+        static string memRefresh = "";
+
+        /// <summary>
+        /// 로그인 상태를 이 PC에 남길지. false 면 토큰을 디스크에 쓰지 않고,
+        /// 프로그램을 끄면 사라진다 (공용 PC 용 기본값).
+        /// </summary>
+        public static bool Persist
+        {
+            get { return persist; }
+            set
+            {
+                persist = value;
+                if (!persist) DeleteTokenFile();          // 남아 있던 것도 지운다
+                else if (memRefresh.Length > 0) WriteTokenFile(memRefresh);
+            }
+        }
+        static bool persist;
+
         public static bool IsConfigured
         {
             get { return AppInfo.GoogleClientId.Length > 0; }
@@ -55,9 +74,15 @@ namespace WowAddonManager
 
         static void SaveRefreshToken(string token)
         {
+            memRefresh = token ?? "";
+            if (memRefresh.Length == 0) { DeleteTokenFile(); return; }
+            if (persist) WriteTokenFile(memRefresh);
+        }
+
+        static void WriteTokenFile(string token)
+        {
             try
             {
-                if (token.Length == 0) { if (File.Exists(TokenPath)) File.Delete(TokenPath); return; }
                 byte[] data = ProtectedData.Protect(
                     Encoding.UTF8.GetBytes(token), null, DataProtectionScope.CurrentUser);
                 File.WriteAllBytes(TokenPath, data);
@@ -65,21 +90,31 @@ namespace WowAddonManager
             catch { }
         }
 
+        static void DeleteTokenFile()
+        {
+            try { if (File.Exists(TokenPath)) File.Delete(TokenPath); }
+            catch { }
+        }
+
         static string LoadRefreshToken()
         {
+            if (memRefresh.Length > 0) return memRefresh;
+            if (!persist) return "";           // 저장 안 하기로 했으면 파일도 안 본다
             try
             {
                 if (!File.Exists(TokenPath)) return "";
                 byte[] data = ProtectedData.Unprotect(
                     File.ReadAllBytes(TokenPath), null, DataProtectionScope.CurrentUser);
-                return Encoding.UTF8.GetString(data);
+                memRefresh = Encoding.UTF8.GetString(data);
+                return memRefresh;
             }
             catch { return ""; }
         }
 
         public static void SignOut()
         {
-            SaveRefreshToken("");
+            memRefresh = "";
+            DeleteTokenFile();
             accessToken = "";
             accessExpires = DateTime.MinValue;
             AccountEmail = "";

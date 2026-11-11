@@ -46,6 +46,7 @@ namespace WowAddonManager
         Panel pnlCloud;
         Label lblCloudState, lblCloudDesc, lblCloudNote;
         FlatBtn btnSignIn, btnSignOut, btnUpload, btnDownload, btnCloudSetup;
+        Check chkKeepSignIn;
         Check chkAutoUpload;
         bool pendingAutoUpload;
         SummaryCard cardExport, cardInstall;
@@ -76,6 +77,7 @@ namespace WowAddonManager
             settings.Load();
             AppInfo.RuntimeGoogleClientId = settings.Get("googleClientId", "");
             AppInfo.RuntimeGoogleClientSecret = settings.Get("googleClientSecret", "");
+            GoogleDrive.Persist = settings.GetBool("keepSignIn", false);
 
             Text = AppInfo.Name;
             Font = Theme.Body;
@@ -117,7 +119,7 @@ namespace WowAddonManager
 
             SetTab(int.Parse(settings.Get("tab", "0")));
             Shown += delegate { Detect(false); StartSilentUpdateCheck(); };
-            FormClosing += delegate { SaveSettings(); };
+            FormClosing += delegate { SaveSettings(); CleanupOnExit(); };
         }
 
         /// <summary>
@@ -918,13 +920,24 @@ namespace WowAddonManager
             btnCloudSetup.Click += delegate { CloudSetup(); };
             pnlCloud.Controls.Add(btnCloudSetup);
 
+            chkKeepSignIn = MakeCheck("이 PC에 로그인 유지 — 다음에 켤 때 바로 연결됩니다",
+                new Point(0, 230), settings.GetBool("keepSignIn", false));
+            chkKeepSignIn.CheckedChanged += delegate
+            {
+                GoogleDrive.Persist = chkKeepSignIn.Checked;
+                settings.Set("keepSignIn", chkKeepSignIn.Checked);
+                settings.Save();
+                RefreshCloud();
+            };
+            pnlCloud.Controls.Add(chkKeepSignIn);
+
             chkAutoUpload = MakeCheck("내보내기가 끝나면 드라이브에 자동으로 올리기",
-                new Point(0, 230), settings.GetBool("autoUpload", false));
+                new Point(0, 258), settings.GetBool("autoUpload", false));
             pnlCloud.Controls.Add(chkAutoUpload);
 
             lblCloudNote = new Label();
             lblCloudNote.AutoSize = false;
-            lblCloudNote.Location = new Point(0, 262);
+            lblCloudNote.Location = new Point(0, 292);
             lblCloudNote.Size = new Size(620, 70);
             lblCloudNote.Font = Theme.Small;
             lblCloudNote.ForeColor = Theme.TextMuted;
@@ -970,11 +983,13 @@ namespace WowAddonManager
             btnDownload.Enabled = on;
             chkAutoUpload.Enabled = on;
 
+            chkKeepSignIn.Enabled = true;
             lblCloudNote.Text =
                 "• 각자 본인 구글 계정으로 로그인하고, 파일은 본인 드라이브에 저장됩니다.\n"
-              + "• 드라이브의 '" + GoogleDrive.FolderName + "' 폴더에 올라갑니다.\n"
               + "• 이 프로그램이 만든 파일만 접근합니다 (drive.file 권한). 다른 파일은 보지 않습니다.\n"
-              + "• 올리기는 '내보내기' 탭의 저장 위치를, 받기는 '설치' 탭의 가져올 폴더를 씁니다.";
+              + (chkKeepSignIn.Checked
+                 ? "• 로그인 상태가 이 PC에 저장됩니다. 공용 PC라면 꺼 두세요."
+                 : "• 이 PC에 아무것도 남기지 않습니다. 프로그램을 끄면 로그인과 받은 파일이 지워집니다.");
         }
 
         void CloudSetup()
@@ -1788,6 +1803,20 @@ namespace WowAddonManager
             if (busy) { bar.Value = 0; btnOpenFolder.Visible = false; }
         }
 
+        /// <summary>로그인을 유지하지 않기로 했다면 이 PC에 남은 것을 지운다</summary>
+        void CleanupOnExit()
+        {
+            if (chkKeepSignIn != null && chkKeepSignIn.Checked) return;
+            try { GoogleDrive.SignOut(); }
+            catch { }
+            try
+            {
+                if (Directory.Exists(AppInfo.CloudCacheDir))
+                    WowCore.DeleteTree(AppInfo.CloudCacheDir);
+            }
+            catch { }
+        }
+
         void SaveSettings()
         {
             settings.Set("wowPath", fldWow.Value);
@@ -1797,6 +1826,7 @@ namespace WowAddonManager
             settings.Set("expGraphics", chkExpGraphics.Checked);
             settings.Set("deepCheck", chkDeep.Checked);
             settings.Set("autoUpload", chkAutoUpload != null && chkAutoUpload.Checked);
+            settings.Set("keepSignIn", chkKeepSignIn != null && chkKeepSignIn.Checked);
             settings.Set("insSettings", chkInsSettings.Checked);
             settings.Set("insBackup", chkInsBackup.Checked);
             settings.Set("insClean", chkInsClean.Checked);

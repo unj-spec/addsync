@@ -316,7 +316,23 @@ namespace WowAddonManager
                 {
                     string full = Path.GetFullPath(files[i]);
                     string rel = full.Substring(baseFull.Length).Replace('\\', '/');
-                    try { zip.CreateEntryFromFile(full, rel, CompressionLevel.Optimal); }
+                    try
+                    {
+                        if (filterConfigPath != null && string.Equals(full,
+                                Path.GetFullPath(filterConfigPath), StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Config.wtf 는 그래픽 줄만 빼고 담는다
+                            int kept, dropped;
+                            string body = FilterConfigWtf(full, out kept, out dropped);
+                            ZipArchiveEntry entry = zip.CreateEntry(rel, CompressionLevel.Optimal);
+                            using (StreamWriter sw = new StreamWriter(entry.Open(), new UTF8Encoding(false)))
+                                sw.Write(body);
+                            if (report != null)
+                                report("  Config.wtf — 개인 설정 " + kept + "개 포함, 그래픽 "
+                                       + dropped + "개 제외", -1);
+                        }
+                        else zip.CreateEntryFromFile(full, rel, CompressionLevel.Optimal);
+                    }
                     catch (Exception ex)
                     {
                         if (report != null) report("  건너뜀: " + rel + " (" + ex.Message + ")", -1);

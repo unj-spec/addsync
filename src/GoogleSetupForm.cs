@@ -1,5 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
+using System.Text;
 using System.Windows.Forms;
 
 namespace WowAddonManager
@@ -63,6 +66,14 @@ namespace WowAddonManager
             open.Click += delegate { Updater.OpenUrl("https://console.cloud.google.com/apis/credentials"); };
             Controls.Add(open);
 
+            FlatBtn load = new FlatBtn();
+            load.Text = "받은 JSON 파일에서 불러오기";
+            load.Kind = BtnKind.Primary;
+            load.Size = new Size(210, 32);
+            load.Location = new Point(222, 206);
+            load.Click += delegate { LoadFromJson(); };
+            Controls.Add(load);
+
             Label l1 = Caption("클라이언트 ID", new Point(22, 254));
             fldId = new Field();
             fldId.Location = new Point(22, 274);
@@ -104,6 +115,61 @@ namespace WowAddonManager
 
             AcceptButton = ok;
             CancelButton = cancel;
+        }
+
+        /// <summary>
+        /// 콘솔에서 받은 client_secret_*.json 을 그대로 읽어 두 칸을 채운다.
+        /// 사람이 긴 문자열을 옮겨 적다 틀리는 일을 없앤다.
+        /// </summary>
+        void LoadFromJson()
+        {
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Title = "구글 콘솔에서 받은 JSON 파일을 고르세요";
+                d.Filter = "클라이언트 정보 (client_secret*.json)|client_secret*.json|JSON 파일 (*.json)|*.json";
+                try
+                {
+                    string dl = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                    if (Directory.Exists(dl)) d.InitialDirectory = dl;
+                }
+                catch { }
+
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+
+                try
+                {
+                    Dictionary<string, object> root =
+                        Json.Obj(Json.Parse(File.ReadAllText(d.FileName, Encoding.UTF8)));
+                    Dictionary<string, object> node = null;
+                    if (root != null)
+                    {
+                        object v;
+                        if (root.TryGetValue("installed", out v)) node = Json.Obj(v);
+                        else if (root.TryGetValue("web", out v)) node = Json.Obj(v);
+                        else node = root;
+                    }
+
+                    string id = Json.Str(node, "client_id", "");
+                    string secret = Json.Str(node, "client_secret", "");
+                    if (id.Length == 0)
+                    {
+                        MessageBox.Show(this,
+                            "그 파일에서 클라이언트 ID 를 찾지 못했습니다.\n\n" +
+                            "구글 콘솔에서 'JSON 다운로드' 로 받은 파일을 고르세요.",
+                            AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+
+                    fldId.Value = id;
+                    fldSecret.Value = secret;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "파일을 읽지 못했습니다.\n\n" + ex.Message,
+                        AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
         }
 
         Label Caption(string text, Point p)

@@ -408,21 +408,7 @@ namespace WowAddonManager
             g.SmoothingMode = SmoothingMode.Default;
         }
 
-        public static string FlavorName(string flavor)
-        {
-            switch (flavor)
-            {
-                case "_retail_": return "정식 서버";
-                case "_classic_": return "클래식";
-                case "_classic_era_": return "클래식 오리지널";
-                case "_classic_ptr_": return "클래식 테스트";
-                case "_ptr_": return "테스트 서버";
-                case "_beta_": return "베타";
-                case "_anniversary_": return "기념 서버";
-                case "_forever_": return "클래식 포에버";
-                default: return flavor;
-            }
-        }
+        public static string FlavorName(string flavor) { return VersionNames.Friendly(flavor); }
 
         static string FriendlyInitial(string flavor)
         {

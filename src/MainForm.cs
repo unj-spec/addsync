@@ -33,8 +33,21 @@ namespace WowAddonManager
         Label lblExpDesc, lblInsDesc, lblInsInfo, lblHint;
         Field fldExportDir, fldSourceDir;
         FlatBtn btnExportDir, btnSourceDir, btnPrimary, btnOpenFolder;
-        Check chkExpSettings, chkExpGraphics, chkInsSettings, chkInsClean, chkInsBackup;
+        Check chkExpSettings, chkExpGraphics, chkDeep;
+        Check chkInsSettings, chkInsClean, chkInsBackup, chkMapAccount;
+        string srcAccountId = "", dstAccountId = "";
         ListView lvAddons;
+        Panel pnlBackup;
+        ListView lvBackup;
+        Label lblBackupNote;
+        Check chkRestoreSettings;
+        FlatBtn btnRestore, btnDeleteBackup, btnBackupFolder;
+        List<BackupInfo> backups = new List<BackupInfo>();
+        Panel pnlCloud;
+        Label lblCloudState, lblCloudDesc, lblCloudNote;
+        FlatBtn btnSignIn, btnSignOut, btnUpload, btnDownload;
+        Check chkAutoUpload;
+        bool pendingAutoUpload;
         SummaryCard cardExport, cardInstall;
         Field fldSearch;
         ToolTip tips = new ToolTip();
@@ -404,7 +417,7 @@ namespace WowAddonManager
         {
             tabs = new TabStrip();
             tabs.Dock = DockStyle.Top;
-            tabs.Items = new string[] { "내보내기", "설치", "애드온 목록" };
+            tabs.Items = new string[] { "내보내기", "설치", "애드온 목록", "백업", "클라우드" };
             tabs.SelectedChanged += delegate { SetTab(tabs.Selected); };
             pnlMain.Controls.Add(tabs);
         }
@@ -473,6 +486,8 @@ namespace WowAddonManager
             BuildExportPanel();
             BuildInstallPanel();
             BuildAddonsPanel();
+            BuildBackupPanel();
+            BuildCloudPanel();
         }
 
         Label Title(string text, Panel parent)
@@ -549,10 +564,15 @@ namespace WowAddonManager
             chkExpGraphics.ForeColor = Theme.TextDim;
             pnlExport.Controls.Add(chkExpGraphics);
 
+            chkDeep = MakeCheck("정밀 검사 — 파일 내용까지 비교해 바뀐 애드온을 가려냅니다 (느림)",
+                new Point(0, 206), settings.GetBool("deepCheck", false));
+            chkDeep.ForeColor = Theme.TextDim;
+            pnlExport.Controls.Add(chkDeep);
+
             cardExport = new SummaryCard();
             cardExport.Caption = "내보낼 내용";
             cardExport.Empty = "왼쪽에서 게임 버전을 선택하세요.";
-            cardExport.Location = new Point(0, 216);
+            cardExport.Location = new Point(0, 242);
             pnlExport.Controls.Add(cardExport);
 
             pnlExport.Resize += delegate
@@ -627,10 +647,15 @@ namespace WowAddonManager
             chkInsClean.ForeColor = Theme.Danger;
             pnlInstall.Controls.Add(chkInsClean);
 
+            chkMapAccount = MakeCheck("계정 폴더 번호 맞추기", new Point(0, 254), false);
+            chkMapAccount.Visible = false;
+            chkMapAccount.ForeColor = Theme.TextDim;
+            pnlInstall.Controls.Add(chkMapAccount);
+
             cardInstall = new SummaryCard();
             cardInstall.Caption = "가져올 내용";
             cardInstall.Empty = "내보내기로 만든 폴더를 고르세요.";
-            cardInstall.Location = new Point(0, 264);
+            cardInstall.Location = new Point(0, 286);
             pnlInstall.Controls.Add(cardInstall);
 
             pnlInstall.Resize += delegate
@@ -710,6 +735,291 @@ namespace WowAddonManager
                 lvAddons.Columns[lvAddons.Columns.Count - 1].Width =
                     Math.Max(110, lvAddons.Width - used - 20);
             };
+        }
+
+        void BuildBackupPanel()
+        {
+            pnlBackup = new Panel();
+            pnlBackup.Dock = DockStyle.Fill;
+            pnlBackup.BackColor = Theme.Panel;
+            pnlBackup.Visible = false;
+            pnlContent.Controls.Add(pnlBackup);
+
+            Title("백업", pnlBackup);
+
+            lblBackupNote = new Label();
+            lblBackupNote.AutoSize = false;
+            lblBackupNote.Location = new Point(0, 30);
+            lblBackupNote.Size = new Size(620, 20);
+            lblBackupNote.Font = Theme.Small;
+            lblBackupNote.ForeColor = Theme.TextDim;
+            lblBackupNote.BackColor = Theme.Panel;
+            pnlBackup.Controls.Add(lblBackupNote);
+
+            lvBackup = new ListView();
+            lvBackup.View = View.Details;
+            lvBackup.FullRowSelect = true;
+            lvBackup.MultiSelect = false;
+            lvBackup.BorderStyle = BorderStyle.None;
+            lvBackup.BackColor = Theme.Field;
+            lvBackup.ForeColor = Theme.Text;
+            lvBackup.OwnerDraw = true;
+            lvBackup.Location = new Point(0, 60);
+            lvBackup.Columns.Add("시각", 170);
+            lvBackup.Columns.Add("포함된 버전", 300);
+            lvBackup.Columns.Add("크기", 110);
+            lvBackup.SelectedIndexChanged += delegate
+            {
+                btnRestore.Enabled = lvBackup.SelectedIndices.Count > 0;
+                btnDeleteBackup.Enabled = btnRestore.Enabled;
+            };
+            lvBackup.DrawColumnHeader += delegate (object s2, DrawListViewColumnHeaderEventArgs e)
+            {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 25, 31)))
+                    e.Graphics.FillRectangle(b, e.Bounds);
+                using (Pen p = new Pen(Theme.Line))
+                    e.Graphics.DrawLine(p, e.Bounds.X, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+                TextRenderer.DrawText(e.Graphics, e.Header.Text, Theme.Tiny,
+                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
+                    Theme.TextMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+            };
+            lvBackup.DrawItem += delegate (object s2, DrawListViewItemEventArgs e)
+            {
+                bool sel = (e.State & ListViewItemStates.Selected) != 0;
+                using (SolidBrush b = new SolidBrush(sel ? Theme.RowSel
+                        : e.ItemIndex % 2 == 0 ? Theme.Field : Color.FromArgb(15, 17, 22)))
+                    e.Graphics.FillRectangle(b, e.Bounds);
+            };
+            lvBackup.DrawSubItem += delegate (object s2, DrawListViewSubItemEventArgs e)
+            {
+                TextRenderer.DrawText(e.Graphics, e.SubItem.Text, Theme.Body,
+                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
+                    e.ColumnIndex == 0 ? Theme.Text : Theme.TextDim,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            };
+            pnlBackup.Controls.Add(lvBackup);
+
+            chkRestoreSettings = MakeCheck("개인 설정도 함께 되돌리기", new Point(0, 0), true);
+            chkRestoreSettings.Width = 220;
+            pnlBackup.Controls.Add(chkRestoreSettings);
+
+            btnRestore = new FlatBtn();
+            btnRestore.Text = "되돌리기";
+            btnRestore.Kind = BtnKind.Danger;
+            btnRestore.Size = new Size(104, 32);
+            btnRestore.Enabled = false;
+            btnRestore.Click += delegate { RestoreSelected(); };
+            pnlBackup.Controls.Add(btnRestore);
+
+            btnDeleteBackup = new FlatBtn();
+            btnDeleteBackup.Text = "삭제";
+            btnDeleteBackup.Size = new Size(84, 32);
+            btnDeleteBackup.Enabled = false;
+            btnDeleteBackup.Click += delegate { DeleteSelectedBackup(); };
+            pnlBackup.Controls.Add(btnDeleteBackup);
+
+            btnBackupFolder = new FlatBtn();
+            btnBackupFolder.Text = "폴더 열기";
+            btnBackupFolder.Size = new Size(96, 32);
+            btnBackupFolder.Click += delegate
+            {
+                try { Directory.CreateDirectory(AppInfo.DefaultBackupRoot); }
+                catch { }
+                Updater.OpenUrl(AppInfo.DefaultBackupRoot);
+            };
+            pnlBackup.Controls.Add(btnBackupFolder);
+
+            pnlBackup.Resize += delegate
+            {
+                int w = pnlBackup.Width, h = pnlBackup.Height;
+                lblBackupNote.Width = w;
+                lvBackup.Size = new Size(w, Math.Max(80, h - 60 - 46));
+                int used = 0;
+                for (int i = 0; i < lvBackup.Columns.Count - 1; i++) used += lvBackup.Columns[i].Width;
+                lvBackup.Columns[lvBackup.Columns.Count - 1].Width = Math.Max(110, w - used - 20);
+                int y = h - 36;
+                chkRestoreSettings.Location = new Point(0, y + 4);
+                btnRestore.Location = new Point(w - 104, y);
+                btnDeleteBackup.Location = new Point(w - 104 - 92, y);
+                btnBackupFolder.Location = new Point(w - 104 - 92 - 104, y);
+            };
+        }
+
+        void BuildCloudPanel()
+        {
+            pnlCloud = new Panel();
+            pnlCloud.Dock = DockStyle.Fill;
+            pnlCloud.BackColor = Theme.Panel;
+            pnlCloud.Visible = false;
+            pnlContent.Controls.Add(pnlCloud);
+
+            Title("구글 드라이브", pnlCloud);
+
+            lblCloudDesc = new Label();
+            lblCloudDesc.Text = "내보낸 꾸러미를 구글 드라이브에 올려 두면, 다른 PC에서 받아 바로 설치할 수 있습니다.\n"
+                              + "드라이브 앱을 깔 수 없는 PC에서도 됩니다. 바뀐 파일만 주고받습니다.";
+            lblCloudDesc.AutoSize = false;
+            lblCloudDesc.Location = new Point(0, 30);
+            lblCloudDesc.Size = new Size(620, 42);
+            lblCloudDesc.ForeColor = Theme.TextDim;
+            lblCloudDesc.BackColor = Theme.Panel;
+            pnlCloud.Controls.Add(lblCloudDesc);
+
+            lblCloudState = new Label();
+            lblCloudState.AutoSize = false;
+            lblCloudState.Location = new Point(0, 86);
+            lblCloudState.Size = new Size(400, 22);
+            lblCloudState.Font = Theme.BodyBold;
+            lblCloudState.BackColor = Theme.Panel;
+            pnlCloud.Controls.Add(lblCloudState);
+
+            btnSignIn = new FlatBtn();
+            btnSignIn.Text = "구글 로그인";
+            btnSignIn.Kind = BtnKind.Primary;
+            btnSignIn.Size = new Size(126, 34);
+            btnSignIn.Location = new Point(0, 118);
+            btnSignIn.Click += delegate { CloudSignIn(); };
+            pnlCloud.Controls.Add(btnSignIn);
+
+            btnSignOut = new FlatBtn();
+            btnSignOut.Text = "로그아웃";
+            btnSignOut.Size = new Size(96, 34);
+            btnSignOut.Location = new Point(134, 118);
+            btnSignOut.Click += delegate
+            {
+                GoogleDrive.SignOut();
+                Status("구글 연결을 끊었습니다.");
+                RefreshCloud();
+            };
+            pnlCloud.Controls.Add(btnSignOut);
+
+            btnUpload = new FlatBtn();
+            btnUpload.Text = "드라이브에 올리기";
+            btnUpload.Size = new Size(156, 36);
+            btnUpload.Location = new Point(0, 176);
+            btnUpload.Click += delegate { CloudUpload(); };
+            pnlCloud.Controls.Add(btnUpload);
+
+            btnDownload = new FlatBtn();
+            btnDownload.Text = "드라이브에서 받기";
+            btnDownload.Size = new Size(156, 36);
+            btnDownload.Location = new Point(164, 176);
+            btnDownload.Click += delegate { CloudDownload(); };
+            pnlCloud.Controls.Add(btnDownload);
+
+            chkAutoUpload = MakeCheck("내보내기가 끝나면 드라이브에 자동으로 올리기",
+                new Point(0, 226), settings.GetBool("autoUpload", false));
+            pnlCloud.Controls.Add(chkAutoUpload);
+
+            lblCloudNote = new Label();
+            lblCloudNote.AutoSize = false;
+            lblCloudNote.Location = new Point(0, 262);
+            lblCloudNote.Size = new Size(620, 70);
+            lblCloudNote.Font = Theme.Small;
+            lblCloudNote.ForeColor = Theme.TextMuted;
+            lblCloudNote.BackColor = Theme.Panel;
+            pnlCloud.Controls.Add(lblCloudNote);
+
+            pnlCloud.Resize += delegate
+            {
+                int w = pnlCloud.Width;
+                lblCloudDesc.Width = w;
+                lblCloudNote.Width = w;
+            };
+        }
+
+        void RefreshCloud()
+        {
+            if (lblCloudState == null) return;
+
+            if (!GoogleDrive.IsConfigured)
+            {
+                lblCloudState.Text = "구글 연동이 아직 설정되지 않았습니다";
+                lblCloudState.ForeColor = Theme.TextMuted;
+                btnSignIn.Enabled = btnSignOut.Enabled = false;
+                btnUpload.Enabled = btnDownload.Enabled = chkAutoUpload.Enabled = false;
+                lblCloudNote.Text =
+                    "이 기능을 쓰려면 구글 클라우드 콘솔에서 만든 OAuth 클라이언트 ID 가 필요합니다.\n"
+                  + "자세한 방법은 README 의 '구글 드라이브 연동' 항목을 보세요.";
+                return;
+            }
+
+            bool on = GoogleDrive.IsSignedIn;
+            lblCloudState.Text = on ? "연결됨" : "연결되지 않음";
+            lblCloudState.ForeColor = on ? Theme.Ok : Theme.TextMuted;
+            btnSignIn.Enabled = !on;
+            btnSignOut.Enabled = on;
+            btnUpload.Enabled = on;
+            btnDownload.Enabled = on;
+            chkAutoUpload.Enabled = on;
+
+            lblCloudNote.Text =
+                "• 드라이브의 '" + GoogleDrive.FolderName + "' 폴더에 올라갑니다.\n"
+              + "• 이 프로그램이 만든 파일만 접근합니다 (drive.file 권한). 다른 파일은 보지 않습니다.\n"
+              + "• 올리기는 '내보내기' 탭의 저장 위치를, 받기는 '설치' 탭의 가져올 폴더를 씁니다.";
+        }
+
+        void CloudSignIn()
+        {
+            btnSignIn.Enabled = false;
+            Status("구글 로그인 중…");
+            Thread t = new Thread(delegate ()
+            {
+                string error = null;
+                bool ok = false;
+                try
+                {
+                    ok = GoogleDrive.SignIn(delegate (string msg)
+                    {
+                        try { BeginInvoke((MethodInvoker)delegate { Status(msg); }); }
+                        catch { }
+                    });
+                }
+                catch (Exception ex) { error = ex.Message; }
+
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        RefreshCloud();
+                        if (error != null) { Status("로그인 실패"); Info("로그인하지 못했습니다.\n\n" + error); }
+                        else if (!ok) { Status("로그인 취소됨"); }
+                        else { Status("구글 드라이브에 연결되었습니다."); }
+                    });
+                }
+                catch { }
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        void CloudUpload()
+        {
+            string dir = fldExportDir.Value.Trim();
+            if (!File.Exists(Path.Combine(dir, Sync.ManifestName)))
+            {
+                Info("올릴 꾸러미가 없습니다.\n\n먼저 '내보내기'를 한 번 실행하세요.");
+                return;
+            }
+            Log("");
+            Log("드라이브에 올리기 — " + dir);
+            Status("드라이브에 올리는 중…");
+            Run(delegate (Reporter rep) { GoogleDrive.UploadFolder(dir, rep); },
+                "드라이브에 올렸습니다.\n\n다른 PC에서 '클라우드 → 드라이브에서 받기' 를 누르면 됩니다.", false);
+        }
+
+        void CloudDownload()
+        {
+            string dir = fldSourceDir.Value.Trim();
+            if (dir.Length == 0) { Info("'설치' 탭에서 받을 폴더를 먼저 지정하세요."); return; }
+            try { Directory.CreateDirectory(dir); }
+            catch (Exception ex) { Info("폴더를 만들 수 없습니다.\n\n" + ex.Message); return; }
+
+            Log("");
+            Log("드라이브에서 받기 → " + dir);
+            Status("드라이브에서 받는 중…");
+            Run(delegate (Reporter rep) { GoogleDrive.DownloadFolder(dir, rep); },
+                "드라이브에서 받았습니다.\n\n'설치' 탭에서 설치를 진행하세요.", false);
         }
 
         Check MakeCheck(string text, Point p, bool chk)
@@ -810,7 +1120,7 @@ namespace WowAddonManager
 
         void SetTab(int t)
         {
-            if (t < 0 || t > 2) t = 0;
+            if (t < 0 || t > 4) t = 0;
             tab = t;
             tabs.Selected = t;
             tabs.Invalidate();
@@ -818,16 +1128,22 @@ namespace WowAddonManager
             pnlExport.Visible = t == 0;
             pnlInstall.Visible = t == 1;
             pnlAddons.Visible = t == 2;
+            pnlBackup.Visible = t == 3;
+            pnlCloud.Visible = t == 4;
             if (t == 0) pnlExport.BringToFront();
             else if (t == 1) pnlInstall.BringToFront();
-            else pnlAddons.BringToFront();
+            else if (t == 2) pnlAddons.BringToFront();
+            else if (t == 3) pnlBackup.BringToFront();
+            else pnlCloud.BringToFront();
 
-            btnPrimary.Visible = t != 2;
+            btnPrimary.Visible = t < 2;
             btnPrimary.Text = t == 0 ? "내보내기 시작" : "설치 시작";
             btnOpenFolder.Visible = false;
 
             if (t == 1) ShowManifest();
             if (t == 2) RefreshAddons();
+            if (t == 3) RefreshBackups();
+            if (t == 4) RefreshCloud();
             UpdateHints();
             LayoutFooter();
         }
@@ -911,7 +1227,7 @@ namespace WowAddonManager
 
             if (fldWow.Value.Length == 0) { lblHint.Text = ""; btnPrimary.Enabled = false; return; }
 
-            if (tab == 2) lblHint.Text = "";
+            if (tab >= 2) lblHint.Text = "";
             else if (sel.Count == 0) lblHint.Text = "왼쪽에서 게임 버전을 하나 이상 선택하세요.";
             else if (tab == 0) lblHint.Text = "선택한 " + sel.Count + "개 버전, 애드온 " + addons + "개를 묶습니다.";
             else lblHint.Text = "선택한 " + sel.Count + "개 버전에 설치합니다.";
@@ -982,7 +1298,7 @@ namespace WowAddonManager
             sizeWorker.Start();
         }
 
-        void UpdateInstallSummary(ManifestInfo mi)
+        void UpdateInstallSummary(Manifest mi)
         {
             if (cardInstall == null) return;
             cardInstall.Rows.Clear();
@@ -990,23 +1306,28 @@ namespace WowAddonManager
 
             if (mi != null)
             {
-                foreach (KeyValuePair<string, FlavorEntry> kv in mi.Flavors)
+                foreach (KeyValuePair<string, FlavorPack> kv in mi.Flavors)
                 {
+                    FlavorPack p = kv.Value;
+                    List<string> zips = new List<string>();
+                    if (p.WtfZip.Length > 0) zips.Add(p.WtfZip);
+                    if (p.IsLegacy) zips.Add(p.LegacyAddOnsZip);
+                    foreach (AddonEntry e in p.Addons) zips.Add(e.Zip);
+
                     long bytes = 0;
-                    foreach (string z in new string[] { kv.Value.AddOnsZip, kv.Value.WtfZip })
+                    foreach (string z in zips)
                     {
-                        if (string.IsNullOrEmpty(z)) continue;
                         try
                         {
-                            string fp = Path.Combine(fldSourceDir.Value, z);
+                            string fp = Path.Combine(fldSourceDir.Value, z.Replace('/', '\\'));
                             if (File.Exists(fp)) bytes += new FileInfo(fp).Length;
                         }
                         catch { }
                     }
                     total += bytes;
                     cardInstall.Rows.Add(new string[] {
-                        VersionList.FlavorName(kv.Key),
-                        "애드온 " + kv.Value.Folders + "개",
+                        VersionNames.Friendly(kv.Key),
+                        "애드온 " + p.FolderCount + "개",
                         WowCore.HumanSize(bytes) });
                 }
             }
@@ -1015,6 +1336,98 @@ namespace WowAddonManager
             cardInstall.FootRight = WowCore.HumanSize(total);
             cardInstall.Size = new Size(pnlInstall.Width, cardInstall.NeededHeight);
             cardInstall.Invalidate();
+        }
+
+        /// <summary>꾸러미와 이 PC 의 배틀넷 계정 폴더 번호가 다른지 본다</summary>
+        void CheckAccounts(Manifest mi)
+        {
+            srcAccountId = ""; dstAccountId = "";
+            chkMapAccount.Visible = false;
+            if (mi == null) return;
+
+            foreach (Flavor f in CheckedFlavors())
+            {
+                FlavorPack p;
+                if (!mi.Flavors.TryGetValue(f.Name, out p) || p.WtfZip.Length == 0) continue;
+
+                List<string> src = Sync.AccountsInZip(
+                    Path.Combine(fldSourceDir.Value, p.WtfZip.Replace('/', '\\')));
+                List<string> dst = Sync.AccountsOnDisk(Path.Combine(f.Path, "WTF"));
+                if (src.Count != 1 || dst.Count != 1) continue;
+                if (string.Equals(src[0], dst[0], StringComparison.OrdinalIgnoreCase)) continue;
+
+                srcAccountId = src[0];
+                dstAccountId = dst[0];
+                chkMapAccount.Text = "계정 폴더 번호 맞추기 (" + srcAccountId + " → " + dstAccountId + ")";
+                chkMapAccount.Visible = true;
+                chkMapAccount.Checked = true;
+                break;
+            }
+        }
+
+        // ── 백업 ────────────────────────────────────────────────
+        void RefreshBackups()
+        {
+            if (lvBackup == null) return;
+            backups = Sync.ListBackups(AppInfo.DefaultBackupRoot);
+
+            lvBackup.BeginUpdate();
+            lvBackup.Items.Clear();
+            foreach (BackupInfo b in backups)
+            {
+                List<string> names = new List<string>();
+                foreach (string f in b.Flavors) names.Add(VersionNames.Friendly(f));
+                ListViewItem it = new ListViewItem(b.When.ToString("yyyy-MM-dd HH:mm"));
+                it.SubItems.Add(string.Join(", ", names.ToArray()));
+                it.SubItems.Add(WowCore.HumanSize(b.Bytes));
+                lvBackup.Items.Add(it);
+            }
+            lvBackup.EndUpdate();
+
+            long total = 0;
+            foreach (BackupInfo b in backups) total += b.Bytes;
+            lblBackupNote.Text = backups.Count == 0
+                ? "아직 백업이 없습니다. 설치할 때마다 자동으로 만들어집니다."
+                : backups.Count + "개 · " + WowCore.HumanSize(total)
+                  + " · 최근 5개만 남기고 자동으로 정리합니다.";
+
+            btnRestore.Enabled = lvBackup.SelectedIndices.Count > 0;
+            btnDeleteBackup.Enabled = btnRestore.Enabled;
+        }
+
+        void RestoreSelected()
+        {
+            if (lvBackup.SelectedIndices.Count == 0) return;
+            BackupInfo b = backups[lvBackup.SelectedIndices[0]];
+
+            if (MessageBox.Show(this,
+                    b.When.ToString("yyyy-MM-dd HH:mm") + " 상태로 되돌립니다.\n\n"
+                    + "지금 애드온은 이 백업의 내용으로 완전히 교체됩니다.\n"
+                    + "와우는 완전히 종료해 두세요.\n\n계속할까요?",
+                    "되돌리기", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+                return;
+
+            BackupInfo target = b;
+            bool settings = chkRestoreSettings.Checked;
+            string wow = fldWow.Value;
+            Log("");
+            Log("되돌리기 — " + target.Dir);
+            Status("되돌리는 중…");
+            Run(delegate (Reporter rep) { Sync.RestoreBackup(target, wow, settings, rep); },
+                "되돌리기가 끝났습니다.", false);
+        }
+
+        void DeleteSelectedBackup()
+        {
+            if (lvBackup.SelectedIndices.Count == 0) return;
+            BackupInfo b = backups[lvBackup.SelectedIndices[0]];
+            if (MessageBox.Show(this,
+                    b.When.ToString("yyyy-MM-dd HH:mm") + " 백업을 지웁니다. 되돌릴 수 없습니다.\n\n계속할까요?",
+                    "백업 삭제", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+                return;
+            try { WowCore.DeleteTree(b.Dir); }
+            catch (Exception ex) { Info("지우지 못했습니다.\n\n" + ex.Message); }
+            RefreshBackups();
         }
 
         // ── 애드온 검색 ─────────────────────────────────────────
@@ -1048,19 +1461,21 @@ namespace WowAddonManager
             if (lblInsInfo == null) return;
             try
             {
-                ManifestInfo mi = WowCore.ReadManifest(fldSourceDir.Value);
+                Manifest mi = Sync.ReadManifest(fldSourceDir.Value);
                 List<string> names = new List<string>();
                 foreach (string k in mi.Flavors.Keys) names.Add(VersionList.FlavorName(k));
                 lblInsInfo.ForeColor = Theme.Ok;
                 lblInsInfo.Text = mi.SourcePC + " 에서 내보냄 · " + string.Join(", ", names.ToArray())
-                    + (mi.HasSettings ? " · 개인 설정 포함" : " · 설정 없음");
+                    + (mi.Settings ? " · 개인 설정 포함" : " · 설정 없음");
                 UpdateInstallSummary(mi);
+                CheckAccounts(mi);
             }
             catch (FileNotFoundException)
             {
                 lblInsInfo.ForeColor = Theme.TextMuted;
                 lblInsInfo.Text = "내보내기로 만든 폴더를 고르세요. (manifest.json 이 있는 폴더)";
                 UpdateInstallSummary(null);
+                chkMapAccount.Visible = false;
             }
             catch (Exception ex)
             {
@@ -1088,6 +1503,7 @@ namespace WowAddonManager
             o.OutputDir = outDir;
             o.IncludeSettings = chkExpSettings.Checked;
             o.IncludeGraphicsConfig = chkExpSettings.Checked && chkExpGraphics.Checked;
+            o.DeepCheck = chkDeep.Checked;
 
             long raw = 0;
             foreach (Flavor f in sel)
@@ -1096,11 +1512,13 @@ namespace WowAddonManager
                 if (o.IncludeSettings) raw += WowCore.DirectorySize(f.WtfPath);
             }
 
+            pendingAutoUpload = chkAutoUpload != null && chkAutoUpload.Checked
+                                && GoogleDrive.IsConfigured && GoogleDrive.IsSignedIn;
             lastOutputDir = outDir;
             Log("");
             Log("내보내기 — 원본 " + WowCore.HumanSize(raw) + " → " + outDir);
             Status("내보내는 중…");
-            Run(delegate (Reporter rep) { WowCore.Export(o, rep); },
+            Run(delegate (Reporter rep) { Sync.Export(o, rep); },
                 "내보내기가 끝났습니다.\n\n이 폴더를 USB·구글드라이브·OneDrive에 두고,\n다른 PC에서 '설치'로 가져오면 됩니다.\n\n" + outDir,
                 true);
         }
@@ -1108,8 +1526,8 @@ namespace WowAddonManager
         void StartInstall()
         {
             if (!CheckWow()) return;
-            ManifestInfo mi;
-            try { mi = WowCore.ReadManifest(fldSourceDir.Value); }
+            Manifest mi;
+            try { mi = Sync.ReadManifest(fldSourceDir.Value); }
             catch (Exception ex) { Info(ex.Message); return; }
 
             List<string> names = new List<string>();
@@ -1129,31 +1547,35 @@ namespace WowAddonManager
             List<string> friendly = new List<string>();
             foreach (string n in names) friendly.Add(VersionList.FlavorName(n));
 
-            string msg = string.Join(", ", friendly.ToArray()) + " 에 설치합니다.\n\n"
-                + "대상: " + fldWow.Value + "\n\n"
-                + (chkInsClean.Checked
-                    ? "• 기존 애드온을 모두 지우고 설치합니다.\n"
-                    : "• 같은 이름은 덮어쓰고, 나머지는 그대로 둡니다.\n")
-                + (chkInsBackup.Checked ? "• 지금 상태는 백업해 둡니다.\n" : "• 백업하지 않습니다.\n")
-                + "\n계속할까요?";
-
-            if (MessageBox.Show(this, msg, "설치 확인", MessageBoxButtons.OKCancel,
-                                MessageBoxIcon.Question) != DialogResult.OK) return;
-
             InstallOptions o = new InstallOptions();
             o.WowPath = fldWow.Value;
             o.SourceDir = fldSourceDir.Value;
             o.FlavorNames = names;
-            o.IncludeSettings = chkInsSettings.Checked && mi.HasSettings;
+            o.IncludeSettings = chkInsSettings.Checked && mi.Settings;
             o.CleanInstall = chkInsClean.Checked;
             o.Backup = chkInsBackup.Checked;
             o.BackupRoot = AppInfo.DefaultBackupRoot;
+            o.MapAccount = chkMapAccount.Visible && chkMapAccount.Checked;
+            o.SourceAccountId = srcAccountId;
+            o.TargetAccountId = dstAccountId;
+
+            // 무엇이 바뀌는지 먼저 보여준다
+            InstallPlan plan;
+            try { plan = Sync.Preview(o, mi); }
+            catch (Exception ex) { Info("미리보기를 만들지 못했습니다.\n\n" + ex.Message); return; }
+
+            using (PreviewForm dlg = new PreviewForm(plan, o))
+            {
+                try { dlg.Icon = Icon; }
+                catch { }
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            }
 
             lastOutputDir = o.BackupRoot;
             Log("");
             Log("설치 — " + o.SourceDir + " → " + o.WowPath);
             Status("설치하는 중…");
-            Run(delegate (Reporter rep) { WowCore.Install(o, rep); },
+            Run(delegate (Reporter rep) { Sync.Install(o, rep); },
                 "설치가 끝났습니다.\n\n와우를 실행해 캐릭터 선택 화면의 'AddOns' 에서 목록을 확인하세요.",
                 false);
         }
@@ -1215,6 +1637,13 @@ namespace WowAddonManager
                             btnOpenFolder.Visible = showOpenFolder;
                             LayoutFooter();
                             LoadFlavors();
+
+                            if (pendingAutoUpload)
+                            {
+                                pendingAutoUpload = false;
+                                CloudUpload();
+                                return;
+                            }
                             MessageBox.Show(this, doneMessage, "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         }
                     });
@@ -1246,6 +1675,8 @@ namespace WowAddonManager
             settings.Set("sourceDir", fldSourceDir.Value);
             settings.Set("expSettings", chkExpSettings.Checked);
             settings.Set("expGraphics", chkExpGraphics.Checked);
+            settings.Set("deepCheck", chkDeep.Checked);
+            settings.Set("autoUpload", chkAutoUpload != null && chkAutoUpload.Checked);
             settings.Set("insSettings", chkInsSettings.Checked);
             settings.Set("insBackup", chkInsBackup.Checked);
             settings.Set("insClean", chkInsClean.Checked);

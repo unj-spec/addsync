@@ -20,6 +20,14 @@ namespace WowAddonManager
 
         public const string Name = "WoW 애드온 매니저";
         public const string RepoOwner = "unj-spec";
+
+        // ── 구글 드라이브 연동 ──────────────────────────────────
+        // 구글 클라우드 콘솔 → 사용자 인증 정보 → OAuth 클라이언트 ID(데스크톱 앱)
+        // 에서 받은 값을 여기에 넣으면 클라우드 탭이 켜진다.
+        // 데스크톱 앱의 보안 비밀번호는 구글 설계상 공개되는 값이다(PKCE 로 보호한다).
+        public const string GoogleClientId = "";
+        public const string GoogleClientSecret = "";
+
         public const string RepoName = "wow-addon-manager";
 
         public static string RepoUrl

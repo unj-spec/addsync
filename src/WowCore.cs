@@ -43,6 +43,9 @@ namespace WowAddonManager
         public string OutputDir;
         public bool IncludeSettings = true;
         public bool IncludeGraphicsConfig = false;
+
+        /// <summary>내용 해시까지 비교해 바뀐 애드온을 정확히 가려낸다 (느림)</summary>
+        public bool DeepCheck = false;
     }
 
     public class InstallOptions
@@ -54,21 +57,12 @@ namespace WowAddonManager
         public bool CleanInstall = false;
         public bool Backup = true;
         public string BackupRoot;
-    }
+        public int KeepBackups = 5;
 
-    public class ManifestInfo
-    {
-        public string SourcePC = "";
-        public string ExportedAt = "";
-        public bool HasSettings;
-        public Dictionary<string, FlavorEntry> Flavors = new Dictionary<string, FlavorEntry>();
-    }
-
-    public class FlavorEntry
-    {
-        public string AddOnsZip = "";
-        public string WtfZip = "";
-        public int Folders;
+        /// <summary>다른 배틀넷 계정으로 옮길 때 WTF\Account 폴더 번호를 바꿔준다</summary>
+        public bool MapAccount = false;
+        public string SourceAccountId = "";
+        public string TargetAccountId = "";
     }
 
     public static class WowCore
@@ -337,6 +331,13 @@ namespace WowAddonManager
 
         public static int ExtractZip(string zipPath, string destDir, string label, Reporter report)
         {
+            return ExtractZip(zipPath, destDir, label, report, null);
+        }
+
+        /// <param name="mapEntry">zip 안 경로를 바꿔 담고 싶을 때 (계정 폴더 번호 교체)</param>
+        public static int ExtractZip(string zipPath, string destDir, string label, Reporter report,
+                                     Func<string, string> mapEntry)
+        {
             Directory.CreateDirectory(destDir);
             // GetFullPath 는 8.3 단축경로를 펼치므로 비교 기준도 같은 방식으로 정규화한다
             string root = Path.GetFullPath(destDir).TrimEnd('\\') + "\\";
@@ -350,7 +351,8 @@ namespace WowAddonManager
                     i++;
                     if (string.IsNullOrEmpty(e.Name)) continue;   // 디렉터리 엔트리
 
-                    string target = Path.GetFullPath(Path.Combine(root, e.FullName.Replace('/', '\\')));
+                    string name = mapEntry != null ? mapEntry(e.FullName) : e.FullName;
+                    string target = Path.GetFullPath(Path.Combine(root, name.Replace('/', '\\')));
                     if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
                     {
                         if (report != null) report("  수상한 경로 무시: " + e.FullName, -1);
@@ -374,137 +376,10 @@ namespace WowAddonManager
             return count;
         }
 
-        // ── 내보내기 ────────────────────────────────────────────────
-        public static void Export(ExportOptions o, Reporter report)
+        /// <summary>와우가 실행 중이면 막는다 (파일이 잠겨 있다)</summary>
+        public static void EnsureWowClosed()
         {
-            Directory.CreateDirectory(o.OutputDir);
-            StringBuilder json = new StringBuilder();
-            json.Append("{\n");
-            json.Append("  \"schema\": 1,\n");
-            json.Append("  \"exportedAt\": \"" + Esc(DateTime.Now.ToString("o", CultureInfo.InvariantCulture)) + "\",\n");
-            json.Append("  \"sourcePC\": \"" + Esc(Environment.MachineName) + "\",\n");
-            json.Append("  \"sourceWow\": \"" + Esc(o.WowPath) + "\",\n");
-            json.Append("  \"settings\": " + (o.IncludeSettings ? "true" : "false") + ",\n");
-            json.Append("  \"flavors\": {\n");
-
-            for (int fi = 0; fi < o.Flavors.Count; fi++)
-            {
-                Flavor f = o.Flavors[fi];
-                report("=== " + f.Name + " — 애드온 " + f.AddOnCount + "개", 0);
-
-                string addonsZip = f.Name + "-AddOns.zip";
-                int n = CreateZip(f.AddOnsPath, Path.Combine(o.OutputDir, addonsZip), null, "AddOns", report);
-                report("  애드온 " + n.ToString("N0") + " 파일 → " + addonsZip + Size(Path.Combine(o.OutputDir, addonsZip)), 100);
-
-                string wtfZip = null;
-                if (o.IncludeSettings && Directory.Exists(f.WtfPath))
-                {
-                    wtfZip = f.Name + "-WTF.zip";
-                    // 그래픽을 빼더라도 Config.wtf 자체는 담는다 (사운드·이름표 같은 개인 설정이 같이 들어 있다)
-                    string cfg = Path.Combine(f.WtfPath, "Config.wtf");
-                    int w = CreateZip(f.WtfPath, Path.Combine(o.OutputDir, wtfZip),
-                        (o.IncludeGraphicsConfig || !File.Exists(cfg)) ? null : cfg, "WTF", report);
-                    if (w == 0) wtfZip = null;
-                    else report("  설정 " + w.ToString("N0") + " 파일 → " + wtfZip + Size(Path.Combine(o.OutputDir, wtfZip)), 100);
-                }
-
-                List<AddonInfo> addons = GetAddons(f.AddOnsPath);
-                json.Append("    \"" + Esc(f.Name) + "\": {\n");
-                json.Append("      \"addOnsZip\": \"" + Esc(addonsZip) + "\",\n");
-                if (wtfZip != null) json.Append("      \"wtfZip\": \"" + Esc(wtfZip) + "\",\n");
-                json.Append("      \"graphicsConfigIncluded\": " + (o.IncludeGraphicsConfig ? "true" : "false") + ",\n");
-                json.Append("      \"folders\": " + addons.Count + ",\n");
-                json.Append("      \"addons\": [\n");
-                for (int i = 0; i < addons.Count; i++)
-                {
-                    AddonInfo a = addons[i];
-                    json.Append("        { \"folder\": \"" + Esc(a.Folder) + "\"");
-                    json.Append(", \"title\": \"" + Esc(a.Title) + "\"");
-                    json.Append(", \"version\": \"" + Esc(a.Version) + "\"");
-                    if (a.Curse != "") json.Append(", \"curse\": \"" + Esc(a.Curse) + "\"");
-                    if (a.Wago != "") json.Append(", \"wago\": \"" + Esc(a.Wago) + "\"");
-                    if (a.WowI != "") json.Append(", \"wowi\": \"" + Esc(a.WowI) + "\"");
-                    json.Append(" }" + (i < addons.Count - 1 ? "," : "") + "\n");
-                }
-                json.Append("      ]\n");
-                json.Append("    }" + (fi < o.Flavors.Count - 1 ? "," : "") + "\n");
-            }
-
-            json.Append("  }\n}\n");
-            File.WriteAllText(Path.Combine(o.OutputDir, "manifest.json"), json.ToString(),
-                              new UTF8Encoding(false));
-            report("manifest.json 작성 완료", 100);
-        }
-
-        static string Size(string path)
-        {
-            try { return string.Format(" ({0:N1} MB)", new FileInfo(path).Length / 1048576.0); }
-            catch { return ""; }
-        }
-
-        static string Esc(string s)
-        {
-            if (s == null) return "";
-            StringBuilder b = new StringBuilder();
-            foreach (char c in s)
-            {
-                if (c == '"') b.Append("\\\"");
-                else if (c == '\\') b.Append("\\\\");
-                else if (c == '\n') b.Append("\\n");
-                else if (c == '\r') b.Append("\\r");
-                else if (c == '\t') b.Append("\\t");
-                else if (c < 0x20) b.Append("\\u" + ((int)c).ToString("x4"));
-                else b.Append(c);
-            }
-            return b.ToString();
-        }
-
-        // ── manifest 읽기 (필요한 필드만, 의존성 없는 간단 파서) ────
-        public static ManifestInfo ReadManifest(string sourceDir)
-        {
-            string path = Path.Combine(sourceDir, "manifest.json");
-            if (!File.Exists(path))
-                throw new FileNotFoundException("manifest.json 이 없습니다.\n내보내기로 만든 폴더를 선택하세요.\n\n" + sourceDir);
-
-            string text = File.ReadAllText(path, Encoding.UTF8);
-            ManifestInfo mi = new ManifestInfo();
-            mi.SourcePC = Grab(text, "sourcePC");
-            mi.ExportedAt = Grab(text, "exportedAt");
-            mi.HasSettings = Regex.IsMatch(text, "\"settings\"\\s*:\\s*true");
-
-            // flavor 블록: "_retail_": { ... "addOnsZip": "...", "wtfZip": "...", "folders": n
-            foreach (Match m in Regex.Matches(text, "\"(_[A-Za-z0-9]+_)\"\\s*:\\s*\\{"))
-            {
-                string name = m.Groups[1].Value;
-                int start = m.Index;
-                int end = text.IndexOf("\"addons\"", start, StringComparison.Ordinal);
-                if (end < 0) end = Math.Min(text.Length, start + 2000);
-                string block = text.Substring(start, end - start);
-
-                FlavorEntry fe = new FlavorEntry();
-                fe.AddOnsZip = Grab(block, "addOnsZip");
-                fe.WtfZip = Grab(block, "wtfZip");
-                int n;
-                Match fm = Regex.Match(block, "\"folders\"\\s*:\\s*(\\d+)");
-                if (fm.Success && int.TryParse(fm.Groups[1].Value, out n)) fe.Folders = n;
-                if (fe.AddOnsZip != "") mi.Flavors[name] = fe;
-            }
-            if (mi.Flavors.Count == 0)
-                throw new InvalidDataException("manifest.json 에서 애드온 정보를 읽지 못했습니다.");
-            return mi;
-        }
-
-        static string Grab(string text, string key)
-        {
-            Match m = Regex.Match(text, "\"" + key + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
-            if (!m.Success) return "";
-            return m.Groups[1].Value.Replace("\\\\", "\\").Replace("\\\"", "\"");
-        }
-
-        // ── 설치 ────────────────────────────────────────────────────
-        public static void Install(InstallOptions o, Reporter report)
-        {
-            string[] procs = { "Wow", "WowClassic", "WowB", "WowT", "WowLauncher" };
+            string[] procs = { "Wow", "WowClassic", "WowB", "WowT" };
             List<string> running = new List<string>();
             foreach (string p in procs)
             {
@@ -516,76 +391,11 @@ namespace WowAddonManager
             }
             if (running.Count > 0)
                 throw new InvalidOperationException(
-                    "WoW가 실행 중입니다 (" + string.Join(", ", running.ToArray()) + ").\n" +
+                    "와우가 실행 중입니다 (" + string.Join(", ", running.ToArray()) + ").\n" +
                     "게임을 완전히 종료한 뒤 다시 시도하세요.");
-
-            ManifestInfo mi = ReadManifest(o.SourceDir);
-            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-            string backupDir = Path.Combine(o.BackupRoot, stamp);
-
-            foreach (string name in o.FlavorNames)
-            {
-                if (!mi.Flavors.ContainsKey(name)) continue;
-                FlavorEntry fe = mi.Flavors[name];
-                string flavorPath = Path.Combine(o.WowPath, name);
-
-                report("=== " + name, 0);
-                if (!Directory.Exists(flavorPath))
-                {
-                    report("  이 PC에 " + name + " 이(가) 없어 건너뜁니다.", 100);
-                    continue;
-                }
-
-                string addOns = Path.Combine(flavorPath, @"Interface\AddOns");
-                string wtf = Path.Combine(flavorPath, "WTF");
-
-                if (o.Backup)
-                {
-                    if (Directory.Exists(addOns))
-                    {
-                        int n = CreateZip(addOns, Path.Combine(backupDir, name + "-AddOns.zip"), null, "backup", report);
-                        if (n > 0) report("  백업 " + n.ToString("N0") + " 파일 → " + name + "-AddOns.zip", 100);
-                    }
-                    if (o.IncludeSettings && Directory.Exists(wtf))
-                    {
-                        int n = CreateZip(wtf, Path.Combine(backupDir, name + "-WTF.zip"), null, "backup", report);
-                        if (n > 0) report("  백업 " + n.ToString("N0") + " 파일 → " + name + "-WTF.zip", 100);
-                    }
-                }
-
-                string zipPath = Path.Combine(o.SourceDir, fe.AddOnsZip);
-                if (File.Exists(zipPath))
-                {
-                    if (o.CleanInstall && Directory.Exists(addOns))
-                    {
-                        report("  기존 애드온 폴더 비우는 중…", 0);
-                        foreach (string d in Directory.GetDirectories(addOns))
-                        { try { DeleteTree(d); } catch (Exception ex) { report("  삭제 실패: " + Path.GetFileName(d) + " (" + ex.Message + ")", -1); } }
-                        foreach (string ff in Directory.GetFiles(addOns))
-                        { try { File.Delete(ff); } catch { } }
-                    }
-                    int n = ExtractZip(zipPath, addOns, "AddOns", report);
-                    report("  애드온 " + n.ToString("N0") + " 파일 설치", 100);
-                }
-                else report("  " + fe.AddOnsZip + " 파일이 없습니다.", -1);
-
-                if (o.IncludeSettings && fe.WtfZip != "")
-                {
-                    string wzip = Path.Combine(o.SourceDir, fe.WtfZip);
-                    if (File.Exists(wzip))
-                    {
-                        int n = ExtractZip(wzip, wtf, "WTF", report);
-                        report("  설정 " + n.ToString("N0") + " 파일 설치", 100);
-                    }
-                    else report("  " + fe.WtfZip + " 파일이 없습니다.", -1);
-                }
-            }
-
-            if (o.Backup && Directory.Exists(backupDir))
-                report("기존 상태 백업: " + backupDir, 100);
         }
 
-        static void DeleteTree(string dir)
+        public static void DeleteTree(string dir)
         {
             foreach (string f in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
             {

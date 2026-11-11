@@ -1784,8 +1784,10 @@ namespace WowAddonManager
                 if (o.IncludeSettings) raw += WowCore.DirectorySize(f.WtfPath);
             }
 
-            pendingAutoUpload = chkAutoUpload != null && chkAutoUpload.Checked
-                                && GoogleDrive.IsConfigured && GoogleDrive.IsSignedIn;
+            // 동기화가 이미 올리기로 정해 둔 경우를 덮어쓰면 안 된다
+            pendingAutoUpload = pendingAutoUpload
+                || (chkAutoUpload != null && chkAutoUpload.Checked
+                    && GoogleDrive.IsConfigured && GoogleDrive.IsSignedIn);
             lastOutputDir = outDir;
             Log("");
             Log("내보내기 — 원본 " + WowCore.HumanSize(raw) + " → " + outDir);

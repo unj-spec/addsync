@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -11,50 +10,46 @@ namespace WowAddonManager
 {
     public class MainForm : Form
     {
-        // 창 장식
-        RedCloseButton btnClose;
-        MinButton btnMin;
-        GoldLink lnkUpdate;
+        // 창
+        Panel pnlTitle, pnlSide, pnlMain, pnlStatus, pnlPath, pnlFooter, pnlContent, pnlUpdate;
+        SysBtn btnMin, btnClose;
+        LinkText lnkUpdate, lnkDetail;
 
         // 업데이트 알림
-        Panel pnlUpdate;
         Label lblUpdateText;
-        WowButton btnUpdateNow, btnUpdateLater;
+        FlatBtn btnUpdateNow, btnUpdateLater;
 
-        // 와우 경로
-        WowField fldWow;
+        // 경로
+        Field fldWow;
         Label lblWowState;
-        WowButton btnBrowseWow;
+        FlatBtn btnBrowseWow;
 
-        // 좌측 버전 목록
-        FlavorList lstFlavors;
+        // 버전 목록
+        VersionList lstFlavors;
 
-        // 우측 내용
-        Panel pnlRight;
-        WowHeading headRight;
+        // 내용
+        TabStrip tabs;
         Panel pnlExport, pnlInstall, pnlAddons;
-        WowField fldExportDir, fldSourceDir;
-        WowButton btnExportDir, btnSourceDir, btnPrimary, btnOpenFolder;
-        WowCheck chkExpSettings, chkExpGraphics, chkInsSettings, chkInsClean, chkInsBackup;
-        Label lblInsInfo, lblHint, lblExpDesc, lblInsDesc;
+        Label lblExpDesc, lblInsDesc, lblInsInfo, lblHint;
+        Field fldExportDir, fldSourceDir;
+        FlatBtn btnExportDir, btnSourceDir, btnPrimary, btnOpenFolder;
+        Check chkExpSettings, chkExpGraphics, chkInsSettings, chkInsClean, chkInsBackup;
         ListView lvAddons;
 
-        // 하단
+        // 상태
         Label lblStatus;
-        WowProgress bar;
-        GoldLink lnkDetail;
+        Bar bar;
         TextBox txtLog;
-        WowTab tabExport, tabInstall, tabAddons;
 
         Thread worker;
         Settings settings = new Settings();
         ReleaseInfo pendingUpdate;
         bool logOpen;
-        int tab;                 // 0 내보내기, 1 설치, 2 애드온 목록
+        int tab;
         string lastOutputDir;
 
-        const int LogH = 140;
-        const int TabH = 30;
+        const int LogH = 150;
+        const int SideW = 232;
 
         public MainForm()
         {
@@ -62,33 +57,50 @@ namespace WowAddonManager
 
             Text = AppInfo.Name;
             Font = Theme.Body;
-            BackColor = Theme.FrameBottom;
+            BackColor = Theme.Window;
             ForeColor = Theme.Text;
             FormBorderStyle = FormBorderStyle.None;
-            ClientSize = new Size(940, 640);
-            MinimumSize = new Size(880, 600);
+            ClientSize = new Size(980, 650);
+            MinimumSize = new Size(900, 600);
             StartPosition = FormStartPosition.CenterScreen;
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            DoubleBuffered = true;
             try { Icon = LoadAppIcon(); }
             catch { }
 
-            BuildChrome();
-            BuildUpdateBar();
-            BuildPathRow();
-            BuildLeft();
-            BuildRight();
-            BuildBottom();
+            Paint += delegate (object s, PaintEventArgs e)
+            {
+                using (Pen p = new Pen(Color.FromArgb(38, 43, 52)))
+                    e.Graphics.DrawRectangle(p, 0, 0, Width - 1, Height - 1);
+            };
+
+            BuildStatus();
+            BuildTitle();
+            BuildSide();
+            BuildMain();
+            OrderDocks();
 
             SetTab(int.Parse(settings.Get("tab", "0")));
-            Shown += delegate
-            {
-                Relayout();
-                Detect(false);
-                StartSilentUpdateCheck();
-            };
-            Resize += delegate { Relayout(); };
+            Shown += delegate { Detect(false); StartSilentUpdateCheck(); };
             FormClosing += delegate { SaveSettings(); };
+        }
+
+        /// <summary>
+        /// 도킹 순서를 못 박는다. WinForms 는 자식 색인이 클수록 먼저(바깥쪽에) 자리를 잡으므로,
+        /// 제목 줄과 상태 줄이 사이드바 위아래를 가로지르게 하려면 색인이 더 커야 한다.
+        /// </summary>
+        void OrderDocks()
+        {
+            Controls.SetChildIndex(pnlMain, 0);
+            Controls.SetChildIndex(pnlSide, 1);
+            Controls.SetChildIndex(txtLog, 2);
+            Controls.SetChildIndex(pnlStatus, 3);
+            Controls.SetChildIndex(pnlTitle, 4);
+
+            pnlMain.Controls.SetChildIndex(pnlContent, 0);
+            pnlMain.Controls.SetChildIndex(pnlFooter, 1);
+            pnlMain.Controls.SetChildIndex(tabs, 2);
+            pnlMain.Controls.SetChildIndex(pnlPath, 3);
+            pnlMain.Controls.SetChildIndex(pnlUpdate, 4);
         }
 
         static Icon LoadAppIcon()
@@ -97,56 +109,6 @@ namespace WowAddonManager
             using (Stream s = asm.GetManifestResourceStream("app.ico"))
                 if (s != null) return new Icon(s);
             return Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-        }
-
-        // ── 창 그리기 ───────────────────────────────────────────
-        /// <summary>오른쪽 내용 구역 바탕색 — 자식 컨트롤이 같은 색으로 지운다 (투명 중첩은 잔상이 남는다)</summary>
-        static readonly Color ContentBg = Color.FromArgb(32, 32, 40);
-
-        int FrameBottomY { get { return ClientSize.Height - TabH - 8; } }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            Graphics g = e.Graphics;
-            Rectangle frame = new Rectangle(0, 0, ClientSize.Width - 1, FrameBottomY);
-            Theme.DrawOrnateFrame(g, frame);
-
-            // 제목 명판
-            Rectangle plate = new Rectangle(66, 8, ClientSize.Width - 132, 24);
-            Theme.DrawTitlePlate(g, plate, AppInfo.Name);
-
-            // 좌상단 원형 초상 (프레임에 걸치게)
-            Rectangle portrait = new Rectangle(8, 4, 50, 50);
-            Theme.DrawPortraitRing(g, portrait);
-            if (Icon != null)
-                using (Icon ic = new Icon(Icon, 32, 32))
-                    g.DrawIcon(ic, new Rectangle(portrait.X + 9, portrait.Y + 9, 32, 32));
-
-            // 내용 구역 배경
-            int top = ContentTop();
-            Rectangle leftRect = new Rectangle(12, top, 288, FrameBottomY - top - 74);
-            Theme.DrawInset(g, leftRect, false);
-
-            Rectangle rightRect = new Rectangle(leftRect.Right + 10, top,
-                ClientSize.Width - leftRect.Right - 24, leftRect.Height);
-            using (SolidBrush b = new SolidBrush(ContentBg)) g.FillRectangle(b, rightRect);
-            using (Pen p = new Pen(Theme.EdgeBlack)) g.DrawRectangle(p, rightRect);
-            using (Pen p = new Pen(Theme.GoldDarkLine))
-                g.DrawRectangle(p, rightRect.X + 1, rightRect.Y + 1, rightRect.Width - 2, rightRect.Height - 2);
-
-            // 목록 제목 줄
-            TextRenderer.DrawText(g, "옮길 버전", Theme.HeadFont,
-                new Rectangle(leftRect.X + 12, leftRect.Y + 6, leftRect.Width - 24, 24),
-                Theme.Gold, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-            using (Pen p = new Pen(Color.FromArgb(70, 64, 46)))
-                g.DrawLine(p, leftRect.X + 10, leftRect.Y + 30, leftRect.Right - 10, leftRect.Y + 30);
-
-            base.OnPaint(e);
-        }
-
-        int ContentTop()
-        {
-            return 84 + (pnlUpdate.Visible ? pnlUpdate.Height + 6 : 0);
         }
 
         // ── 창 끌기 / 크기 조절 ──────────────────────────────────
@@ -159,6 +121,12 @@ namespace WowAddonManager
                   HTTOP = 12, HTTOPLEFT = 13, HTTOPRIGHT = 14,
                   HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17;
 
+        void DragWindow()
+        {
+            ReleaseCapture();
+            SendMessage(Handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+        }
+
         protected override void WndProc(ref Message m)
         {
             if (m.Msg == WM_NCHITTEST)
@@ -169,7 +137,7 @@ namespace WowAddonManager
                     int x = (short)((long)m.LParam & 0xFFFF);
                     int y = (short)(((long)m.LParam >> 16) & 0xFFFF);
                     Point p = PointToClient(new Point(x, y));
-                    const int gr = 6;
+                    const int gr = 5;
                     bool l = p.X <= gr, r = p.X >= ClientSize.Width - gr;
                     bool t = p.Y <= gr, b = p.Y >= ClientSize.Height - gr;
 
@@ -181,174 +149,341 @@ namespace WowAddonManager
                     else if (r) m.Result = (IntPtr)HTRIGHT;
                     else if (t) m.Result = (IntPtr)HTTOP;
                     else if (b) m.Result = (IntPtr)HTBOTTOM;
-                    else if (p.Y < 36 && p.X > 60 && p.X < ClientSize.Width - 70)
-                        m.Result = (IntPtr)HTCAPTION;   // 제목 명판을 끌면 창이 움직인다
                 }
                 return;
             }
             base.WndProc(ref m);
         }
 
-        void BuildChrome()
+        // ── 제목 줄 ─────────────────────────────────────────────
+        void BuildTitle()
         {
-            btnClose = new RedCloseButton();
+            pnlTitle = new Panel();
+            pnlTitle.Dock = DockStyle.Top;
+            pnlTitle.Height = 44;
+            pnlTitle.BackColor = Theme.TitleBar;
+            pnlTitle.Paint += delegate (object s, PaintEventArgs e)
+            {
+                Graphics g = e.Graphics;
+                if (Icon != null)
+                {
+                    Rectangle logo = new Rectangle(14, 11, 22, 22);
+                    Theme.FillRound(g, logo, 5, Theme.Accent);
+                    using (Icon ic = new Icon(Icon, 16, 16))
+                        g.DrawIcon(ic, new Rectangle(logo.X + 3, logo.Y + 3, 16, 16));
+                }
+                TextRenderer.DrawText(g, AppInfo.Name, Theme.BodyBold,
+                    new Rectangle(46, 0, 300, pnlTitle.Height), Theme.Text,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                using (Pen p = new Pen(Theme.Line))
+                    g.DrawLine(p, 0, pnlTitle.Height - 1, pnlTitle.Width, pnlTitle.Height - 1);
+            };
+            pnlTitle.MouseDown += delegate (object s, MouseEventArgs e)
+            {
+                if (e.Button == MouseButtons.Left) DragWindow();
+            };
+            Controls.Add(pnlTitle);
+
+            btnClose = new SysBtn();
+            btnClose.IsClose = true;
+            btnClose.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnClose.Click += delegate { Close(); };
-            Controls.Add(btnClose);
+            pnlTitle.Controls.Add(btnClose);
 
-            btnMin = new MinButton();
+            btnMin = new SysBtn();
+            btnMin.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnMin.Click += delegate { WindowState = FormWindowState.Minimized; };
-            Controls.Add(btnMin);
+            pnlTitle.Controls.Add(btnMin);
 
-            lnkUpdate = new GoldLink();
+            pnlTitle.Resize += delegate { LayoutTitle(); };
+            LayoutTitle();
+        }
+
+        void LayoutTitle()
+        {
+            btnClose.Location = new Point(pnlTitle.Width - btnClose.Width - 8, 8);
+            btnMin.Location = new Point(btnClose.Left - btnMin.Width - 2, 8);
+        }
+
+        // ── 좌측 ────────────────────────────────────────────────
+        void BuildSide()
+        {
+            pnlSide = new Panel();
+            pnlSide.Dock = DockStyle.Left;
+            pnlSide.Width = SideW;
+            pnlSide.BackColor = Theme.Side;
+            pnlSide.Paint += delegate (object s, PaintEventArgs e)
+            {
+                TextRenderer.DrawText(e.Graphics, "게임 버전", Theme.Tiny,
+                    new Rectangle(18, 16, 200, 16), Theme.TextMuted, TextFormatFlags.Left);
+                using (Pen p = new Pen(Theme.Line))
+                {
+                    e.Graphics.DrawLine(p, pnlSide.Width - 1, 0, pnlSide.Width - 1, pnlSide.Height);
+                    e.Graphics.DrawLine(p, 0, pnlSide.Height - 41, pnlSide.Width - 1, pnlSide.Height - 41);
+                }
+            };
+            Controls.Add(pnlSide);
+
+            lnkUpdate = new LinkText();
             lnkUpdate.Text = "v" + AppInfo.Version + " · 업데이트 확인";
+            lnkUpdate.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            lnkUpdate.BackColor = Theme.Side;
             lnkUpdate.Click += delegate { ManualUpdateCheck(); };
-            Controls.Add(lnkUpdate);
+            pnlSide.Controls.Add(lnkUpdate);
+
+            lstFlavors = new VersionList();
+            lstFlavors.SelectedIndexChanged += delegate { UpdateHints(); RefreshAddons(); };
+            lstFlavors.CheckChanged += delegate { UpdateHints(); };
+            pnlSide.Controls.Add(lstFlavors);
+
+            pnlSide.Resize += delegate { LayoutSide(); };
+            LayoutSide();
+        }
+
+        void LayoutSide()
+        {
+            lstFlavors.Location = new Point(0, 38);
+            lstFlavors.Size = new Size(pnlSide.Width - 1, Math.Max(60, pnlSide.Height - 38 - 42));
+            lnkUpdate.Location = new Point(18, pnlSide.Height - 28);
+        }
+
+        // ── 우측 ────────────────────────────────────────────────
+        void BuildMain()
+        {
+            pnlMain = new Panel();
+            pnlMain.Dock = DockStyle.Fill;
+            pnlMain.BackColor = Theme.Panel;
+            Controls.Add(pnlMain);
+
+            BuildFooter();
+            BuildContent();
+            BuildTabs();
+            BuildPathRow();
+            BuildUpdateBar();
         }
 
         void BuildUpdateBar()
         {
             pnlUpdate = new Panel();
-            pnlUpdate.Height = 38;
+            pnlUpdate.Dock = DockStyle.Top;
+            pnlUpdate.Height = 44;
             pnlUpdate.Visible = false;
-            pnlUpdate.BackColor = Color.FromArgb(40, 34, 20);
+            pnlUpdate.BackColor = Color.FromArgb(17, 35, 54);
             pnlUpdate.Paint += delegate (object s, PaintEventArgs e)
             {
-                Rectangle r = new Rectangle(0, 0, pnlUpdate.Width - 1, pnlUpdate.Height - 1);
-                Theme.FillV(e.Graphics, r, Color.FromArgb(62, 52, 28), Color.FromArgb(36, 30, 16));
-                using (Pen p = new Pen(Theme.EdgeBlack)) e.Graphics.DrawRectangle(p, r);
-                using (Pen p = new Pen(Theme.GoldMid))
-                    e.Graphics.DrawRectangle(p, 1, 1, r.Width - 2, r.Height - 2);
+                using (Pen p = new Pen(Theme.AccentLine))
+                    e.Graphics.DrawLine(p, 0, pnlUpdate.Height - 1, pnlUpdate.Width, pnlUpdate.Height - 1);
             };
-            Controls.Add(pnlUpdate);
+            pnlMain.Controls.Add(pnlUpdate);
 
             lblUpdateText = new Label();
             lblUpdateText.AutoSize = true;
-            lblUpdateText.Location = new Point(14, 11);
-            lblUpdateText.ForeColor = Theme.Gold;
-            lblUpdateText.BackColor = Color.Transparent;
+            lblUpdateText.Location = new Point(18, 14);
+            lblUpdateText.ForeColor = Theme.AccentText;
+            lblUpdateText.BackColor = pnlUpdate.BackColor;
             pnlUpdate.Controls.Add(lblUpdateText);
 
-            btnUpdateNow = new WowButton();
+            btnUpdateNow = new FlatBtn();
             btnUpdateNow.Text = "지금 업데이트";
-            btnUpdateNow.Size = new Size(114, 26);
+            btnUpdateNow.Kind = BtnKind.Primary;
+            btnUpdateNow.Size = new Size(112, 28);
+            btnUpdateNow.BackColor = pnlUpdate.BackColor;
+            btnUpdateNow.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnUpdateNow.Click += delegate { DoUpdate(); };
             pnlUpdate.Controls.Add(btnUpdateNow);
 
-            btnUpdateLater = new WowButton();
+            btnUpdateLater = new FlatBtn();
             btnUpdateLater.Text = "나중에";
-            btnUpdateLater.Size = new Size(72, 26);
-            btnUpdateLater.Click += delegate { pnlUpdate.Visible = false; Relayout(); };
+            btnUpdateLater.Size = new Size(72, 28);
+            btnUpdateLater.BackColor = pnlUpdate.BackColor;
+            btnUpdateLater.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnUpdateLater.Click += delegate { pnlUpdate.Visible = false; };
             pnlUpdate.Controls.Add(btnUpdateLater);
+
+            pnlUpdate.Resize += delegate
+            {
+                btnUpdateLater.Location = new Point(pnlUpdate.Width - btnUpdateLater.Width - 16, 8);
+                btnUpdateNow.Location = new Point(btnUpdateLater.Left - btnUpdateNow.Width - 8, 8);
+            };
         }
 
         void BuildPathRow()
         {
-            fldWow = new WowField();
+            pnlPath = new Panel();
+            pnlPath.Dock = DockStyle.Top;
+            pnlPath.Height = 54;
+            pnlPath.BackColor = Theme.Panel;
+            pnlPath.Paint += delegate (object s, PaintEventArgs e)
+            {
+                TextRenderer.DrawText(e.Graphics, "와우 위치", Theme.Small,
+                    new Rectangle(18, 0, 70, pnlPath.Height), Theme.TextMuted,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                using (Pen p = new Pen(Theme.Line))
+                    e.Graphics.DrawLine(p, 0, pnlPath.Height - 1, pnlPath.Width, pnlPath.Height - 1);
+            };
+            pnlMain.Controls.Add(pnlPath);
+
+            fldWow = new Field();
             fldWow.Box.ReadOnly = true;
-            Controls.Add(fldWow);
+            fldWow.Location = new Point(84, 11);
+            pnlPath.Controls.Add(fldWow);
 
             lblWowState = new Label();
             lblWowState.AutoSize = true;
             lblWowState.Font = Theme.Small;
             lblWowState.ForeColor = Theme.Ok;
-            lblWowState.BackColor = Color.Transparent;
-            Controls.Add(lblWowState);
+            lblWowState.BackColor = Theme.Panel;
+            pnlPath.Controls.Add(lblWowState);
 
-            btnBrowseWow = new WowButton();
+            btnBrowseWow = new FlatBtn();
             btnBrowseWow.Text = "변경";
-            btnBrowseWow.Size = new Size(72, 28);
+            btnBrowseWow.Size = new Size(68, 32);
+            btnBrowseWow.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnBrowseWow.Click += delegate { BrowseWow(); };
-            Controls.Add(btnBrowseWow);
+            pnlPath.Controls.Add(btnBrowseWow);
+
+            pnlPath.Resize += delegate { LayoutPath(); };
         }
 
-        void BuildLeft()
+        void LayoutPath()
         {
-            lstFlavors = new FlavorList();
-            lstFlavors.SelectedIndexChanged += delegate { UpdateHints(); RefreshAddons(); };
-            lstFlavors.CheckChanged += delegate { UpdateHints(); };
-            Controls.Add(lstFlavors);
+            btnBrowseWow.Location = new Point(pnlPath.Width - btnBrowseWow.Width - 18, 11);
+            lblWowState.Location = new Point(btnBrowseWow.Left - lblWowState.Width - 12, 20);
+            fldWow.Size = new Size(Math.Max(120, lblWowState.Left - 12 - fldWow.Left), 32);
         }
 
-        // ── 우측 내용 ───────────────────────────────────────────
-        void BuildRight()
+        void BuildTabs()
         {
-            pnlRight = new Panel();
-            pnlRight.BackColor = ContentBg;
-            Controls.Add(pnlRight);
+            tabs = new TabStrip();
+            tabs.Dock = DockStyle.Top;
+            tabs.Items = new string[] { "내보내기", "설치", "애드온 목록" };
+            tabs.SelectedChanged += delegate { SetTab(tabs.Selected); };
+            pnlMain.Controls.Add(tabs);
+        }
 
-            headRight = new WowHeading();
-            headRight.Location = new Point(0, 0);
-            pnlRight.Controls.Add(headRight);
+        void BuildFooter()
+        {
+            pnlFooter = new Panel();
+            pnlFooter.Dock = DockStyle.Bottom;
+            pnlFooter.Height = 66;
+            pnlFooter.BackColor = Theme.Panel;
+            pnlFooter.Paint += delegate (object s, PaintEventArgs e)
+            {
+                using (Pen p = new Pen(Theme.Line))
+                    e.Graphics.DrawLine(p, 0, 0, pnlFooter.Width, 0);
+            };
+            pnlMain.Controls.Add(pnlFooter);
 
-            BuildExportPanel();
-            BuildInstallPanel();
-            BuildAddonsPanel();
-
-            lblHint = new Label();
-            lblHint.AutoSize = false;
-            lblHint.Font = Theme.Small;
-            lblHint.ForeColor = Theme.TextMuted;
-            lblHint.BackColor = ContentBg;
-            pnlRight.Controls.Add(lblHint);
-
-            btnPrimary = new WowButton();
-            btnPrimary.Font = Theme.F(10f, FontStyle.Bold);
-            btnPrimary.Height = 38;
+            btnPrimary = new FlatBtn();
+            btnPrimary.Kind = BtnKind.Primary;
+            btnPrimary.Font = Theme.H2;
+            btnPrimary.Size = new Size(168, 38);
+            btnPrimary.Location = new Point(22, 14);
             btnPrimary.Click += delegate { if (tab == 0) StartExport(); else StartInstall(); };
-            pnlRight.Controls.Add(btnPrimary);
+            pnlFooter.Controls.Add(btnPrimary);
 
-            btnOpenFolder = new WowButton();
+            btnOpenFolder = new FlatBtn();
             btnOpenFolder.Text = "폴더 열기";
-            btnOpenFolder.Height = 38;
-            btnOpenFolder.Width = 96;
+            btnOpenFolder.Size = new Size(96, 38);
+            btnOpenFolder.Location = new Point(200, 14);
             btnOpenFolder.Visible = false;
             btnOpenFolder.Click += delegate
             {
                 if (lastOutputDir != null && Directory.Exists(lastOutputDir))
                     Updater.OpenUrl(lastOutputDir);
             };
-            pnlRight.Controls.Add(btnOpenFolder);
+            pnlFooter.Controls.Add(btnOpenFolder);
+
+            lblHint = new Label();
+            lblHint.AutoSize = false;
+            lblHint.Font = Theme.Small;
+            lblHint.ForeColor = Theme.TextMuted;
+            lblHint.BackColor = Theme.Panel;
+            lblHint.Location = new Point(206, 26);
+            lblHint.Size = new Size(460, 18);
+            pnlFooter.Controls.Add(lblHint);
+
+            pnlFooter.Resize += delegate { LayoutFooter(); };
         }
 
-        Label Caption(string text, Point p, Panel parent)
+        void LayoutFooter()
+        {
+            int x = btnPrimary.Right + 10;
+            if (btnOpenFolder.Visible) { btnOpenFolder.Location = new Point(x, 14); x = btnOpenFolder.Right + 12; }
+            lblHint.Location = new Point(x + 2, 26);
+            lblHint.Width = Math.Max(80, pnlFooter.Width - x - 24);
+        }
+
+        void BuildContent()
+        {
+            pnlContent = new Panel();
+            pnlContent.Dock = DockStyle.Fill;
+            pnlContent.BackColor = Theme.Panel;
+            pnlContent.Padding = new Padding(22, 20, 22, 10);
+            pnlMain.Controls.Add(pnlContent);
+
+            BuildExportPanel();
+            BuildInstallPanel();
+            BuildAddonsPanel();
+        }
+
+        Label Title(string text, Panel parent)
+        {
+            Label l = new Label();
+            l.Text = text;
+            l.AutoSize = false;
+            l.Font = Theme.H1;
+            l.ForeColor = Theme.Text;
+            l.BackColor = Theme.Panel;
+            l.Location = new Point(0, 0);
+            l.Size = new Size(400, 24);
+            parent.Controls.Add(l);
+            return l;
+        }
+
+        void Caption(string text, Point p, Panel parent)
         {
             Label l = new Label();
             l.Text = text;
             l.AutoSize = true;
+            l.Font = Theme.Tiny;
             l.Location = p;
-            l.ForeColor = Theme.TextDim;
-            l.BackColor = ContentBg;
+            l.ForeColor = Theme.TextMuted;
+            l.BackColor = Theme.Panel;
             parent.Controls.Add(l);
-            return l;
         }
 
         void BuildExportPanel()
         {
             pnlExport = new Panel();
-            pnlExport.BackColor = ContentBg;
-            pnlRight.Controls.Add(pnlExport);
+            pnlExport.Dock = DockStyle.Fill;
+            pnlExport.BackColor = Theme.Panel;
+            pnlContent.Controls.Add(pnlExport);
+
+            Title("내보내기", pnlExport);
 
             lblExpDesc = new Label();
             lblExpDesc.Text = "이 PC의 애드온과 설정을 한 폴더에 담습니다.\n" +
                               "그 폴더를 USB나 클라우드에 올려 두고, 다른 PC에서 '설치'로 가져오면 됩니다.";
             lblExpDesc.AutoSize = false;
-            lblExpDesc.Height = 40;
-            lblExpDesc.Location = new Point(0, 2);
+            lblExpDesc.Location = new Point(0, 30);
+            lblExpDesc.Size = new Size(620, 42);
             lblExpDesc.ForeColor = Theme.TextDim;
-            lblExpDesc.BackColor = ContentBg;
+            lblExpDesc.BackColor = Theme.Panel;
             pnlExport.Controls.Add(lblExpDesc);
 
-            Caption("저장 위치", new Point(0, 52), pnlExport);
+            Caption("저장 위치", new Point(0, 84), pnlExport);
 
-            fldExportDir = new WowField();
-            fldExportDir.Location = new Point(0, 72);
+            fldExportDir = new Field();
+            fldExportDir.Location = new Point(0, 104);
             fldExportDir.Value = settings.Get("exportDir", AppInfo.DefaultExportRoot);
             EnableFolderDrop(fldExportDir);
             pnlExport.Controls.Add(fldExportDir);
 
-            btnExportDir = new WowButton();
+            btnExportDir = new FlatBtn();
             btnExportDir.Text = "찾아보기";
-            btnExportDir.Size = new Size(86, 28);
+            btnExportDir.Size = new Size(84, 32);
+            btnExportDir.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnExportDir.Click += delegate
             {
                 string d = PickFolder("애드온과 설정을 저장할 폴더", fldExportDir.Value);
@@ -356,45 +491,58 @@ namespace WowAddonManager
             };
             pnlExport.Controls.Add(btnExportDir);
 
-            chkExpSettings = MakeCheck("설정(WTF)도 함께 — 애드온 프로필·키바인드·매크로",
-                new Point(0, 112), settings.GetBool("expSettings", true));
+            chkExpSettings = MakeCheck("설정(WTF)도 함께 — 애드온 프로필 · 키바인드 · 매크로",
+                new Point(0, 150), settings.GetBool("expSettings", true));
             chkExpSettings.CheckedChanged += delegate { chkExpGraphics.Enabled = chkExpSettings.Checked; };
             pnlExport.Controls.Add(chkExpSettings);
 
-            chkExpGraphics = MakeCheck("해상도·그래픽 설정도 포함 (모니터가 다르면 권장하지 않음)",
-                new Point(22, 138), settings.GetBool("expGraphics", false));
+            chkExpGraphics = MakeCheck("해상도 · 그래픽 설정도 포함 (모니터가 다르면 권장하지 않음)",
+                new Point(25, 178), settings.GetBool("expGraphics", false));
+            chkExpGraphics.ForeColor = Theme.TextDim;
             pnlExport.Controls.Add(chkExpGraphics);
+
+            pnlExport.Resize += delegate
+            {
+                int w = pnlExport.Width;
+                lblExpDesc.Width = w;
+                btnExportDir.Location = new Point(w - 84, 104);
+                fldExportDir.Size = new Size(Math.Max(120, w - 84 - 8), 32);
+            };
         }
 
         void BuildInstallPanel()
         {
             pnlInstall = new Panel();
-            pnlInstall.BackColor = ContentBg;
+            pnlInstall.Dock = DockStyle.Fill;
+            pnlInstall.BackColor = Theme.Panel;
             pnlInstall.Visible = false;
-            pnlRight.Controls.Add(pnlInstall);
+            pnlContent.Controls.Add(pnlInstall);
+
+            Title("설치", pnlInstall);
 
             lblInsDesc = new Label();
             lblInsDesc.Text = "내보내기로 만든 폴더를 골라 이 PC에 그대로 설치합니다.\n" +
                               "와우는 완전히 종료해 두세요.";
             lblInsDesc.AutoSize = false;
-            lblInsDesc.Height = 40;
-            lblInsDesc.Location = new Point(0, 2);
+            lblInsDesc.Location = new Point(0, 30);
+            lblInsDesc.Size = new Size(620, 42);
             lblInsDesc.ForeColor = Theme.TextDim;
-            lblInsDesc.BackColor = ContentBg;
+            lblInsDesc.BackColor = Theme.Panel;
             pnlInstall.Controls.Add(lblInsDesc);
 
-            Caption("가져올 폴더", new Point(0, 52), pnlInstall);
+            Caption("가져올 폴더", new Point(0, 84), pnlInstall);
 
-            fldSourceDir = new WowField();
-            fldSourceDir.Location = new Point(0, 72);
+            fldSourceDir = new Field();
+            fldSourceDir.Location = new Point(0, 104);
             fldSourceDir.Value = settings.Get("sourceDir", AppInfo.DefaultExportRoot);
             fldSourceDir.Box.TextChanged += delegate { ShowManifest(); };
             EnableFolderDrop(fldSourceDir);
             pnlInstall.Controls.Add(fldSourceDir);
 
-            btnSourceDir = new WowButton();
+            btnSourceDir = new FlatBtn();
             btnSourceDir.Text = "찾아보기";
-            btnSourceDir.Size = new Size(86, 28);
+            btnSourceDir.Size = new Size(84, 32);
+            btnSourceDir.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnSourceDir.Click += delegate
             {
                 string d = PickFolder("내보내기로 만든 폴더 (manifest.json 이 있는 곳)", fldSourceDir.Value);
@@ -404,85 +552,107 @@ namespace WowAddonManager
 
             lblInsInfo = new Label();
             lblInsInfo.AutoSize = false;
-            lblInsInfo.Location = new Point(0, 104);
-            lblInsInfo.Height = 18;
+            lblInsInfo.Location = new Point(0, 142);
+            lblInsInfo.Size = new Size(620, 18);
             lblInsInfo.Font = Theme.Small;
             lblInsInfo.ForeColor = Theme.TextMuted;
-            lblInsInfo.BackColor = ContentBg;
+            lblInsInfo.BackColor = Theme.Panel;
             pnlInstall.Controls.Add(lblInsInfo);
 
-            chkInsSettings = MakeCheck("설정(WTF)도 함께 설치", new Point(0, 128),
+            chkInsSettings = MakeCheck("설정(WTF)도 함께 설치", new Point(0, 170),
                 settings.GetBool("insSettings", true));
             pnlInstall.Controls.Add(chkInsSettings);
 
-            chkInsBackup = MakeCheck("설치 전에 지금 상태를 백업", new Point(0, 152),
+            chkInsBackup = MakeCheck("설치 전에 지금 상태를 백업", new Point(0, 198),
                 settings.GetBool("insBackup", true));
             pnlInstall.Controls.Add(chkInsBackup);
 
             chkInsClean = MakeCheck("기존 애드온을 모두 지우고 설치 (완전히 동일하게)",
-                new Point(0, 176), settings.GetBool("insClean", false));
+                new Point(0, 226), settings.GetBool("insClean", false));
             chkInsClean.ForeColor = Theme.Danger;
             pnlInstall.Controls.Add(chkInsClean);
+
+            pnlInstall.Resize += delegate
+            {
+                int w = pnlInstall.Width;
+                lblInsDesc.Width = w;
+                lblInsInfo.Width = w;
+                btnSourceDir.Location = new Point(w - 84, 104);
+                fldSourceDir.Size = new Size(Math.Max(120, w - 84 - 8), 32);
+            };
         }
 
         void BuildAddonsPanel()
         {
             pnlAddons = new Panel();
-            pnlAddons.BackColor = ContentBg;
+            pnlAddons.Dock = DockStyle.Fill;
+            pnlAddons.BackColor = Theme.Panel;
             pnlAddons.Visible = false;
-            pnlRight.Controls.Add(pnlAddons);
+            pnlContent.Controls.Add(pnlAddons);
+
+            Title("애드온 목록", pnlAddons);
 
             lvAddons = new ListView();
             lvAddons.View = View.Details;
             lvAddons.FullRowSelect = true;
             lvAddons.BorderStyle = BorderStyle.None;
-            lvAddons.BackColor = Theme.Inset;
+            lvAddons.BackColor = Theme.Field;
             lvAddons.ForeColor = Theme.Text;
             lvAddons.OwnerDraw = true;
-            lvAddons.Location = new Point(0, 0);
-            lvAddons.Columns.Add("애드온", 220);
-            lvAddons.Columns.Add("폴더", 180);
-            lvAddons.Columns.Add("버전", 90);
-            lvAddons.Columns.Add("출처", 100);
+            lvAddons.Location = new Point(0, 34);
+            lvAddons.Columns.Add("애드온", 240);
+            lvAddons.Columns.Add("폴더", 200);
+            lvAddons.Columns.Add("버전", 100);
+            lvAddons.Columns.Add("출처", 110);
 
             lvAddons.DrawColumnHeader += delegate (object s, DrawListViewColumnHeaderEventArgs e)
             {
-                Theme.FillV(e.Graphics, e.Bounds, Color.FromArgb(52, 52, 64), Color.FromArgb(28, 28, 36));
-                using (Pen p = new Pen(Theme.EdgeBlack))
-                    e.Graphics.DrawRectangle(p, e.Bounds.X, e.Bounds.Y, e.Bounds.Width - 1, e.Bounds.Height - 1);
-                TextRenderer.DrawText(e.Graphics, e.Header.Text, Theme.BodyBold,
-                    new Rectangle(e.Bounds.X + 8, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height),
-                    Theme.Gold, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(22, 25, 31)))
+                    e.Graphics.FillRectangle(b, e.Bounds);
+                using (Pen p = new Pen(Theme.Line))
+                    e.Graphics.DrawLine(p, e.Bounds.X, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+                TextRenderer.DrawText(e.Graphics, e.Header.Text, Theme.Tiny,
+                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
+                    Theme.TextMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
             };
             lvAddons.DrawItem += delegate (object s, DrawListViewItemEventArgs e)
             {
                 bool sel = (e.State & ListViewItemStates.Selected) != 0;
-                if (sel) Theme.FillV(e.Graphics, e.Bounds, Theme.SelBlueTop, Theme.SelBlueBottom);
-                else using (SolidBrush b = new SolidBrush(e.ItemIndex % 2 == 0 ? Theme.Inset : Theme.InsetAlt))
-                        e.Graphics.FillRectangle(b, e.Bounds);
+                using (SolidBrush b = new SolidBrush(sel ? Theme.RowSel
+                        : e.ItemIndex % 2 == 0 ? Theme.Field : Color.FromArgb(15, 17, 22)))
+                    e.Graphics.FillRectangle(b, e.Bounds);
             };
             lvAddons.DrawSubItem += delegate (object s, DrawListViewSubItemEventArgs e)
             {
                 Color c = e.ColumnIndex == 0 ? Theme.Text : Theme.TextDim;
                 TextRenderer.DrawText(e.Graphics, e.SubItem.Text, Theme.Body,
-                    new Rectangle(e.Bounds.X + 8, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height),
+                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height),
                     c, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             };
             pnlAddons.Controls.Add(lvAddons);
+
+            pnlAddons.Resize += delegate
+            {
+                lvAddons.Size = new Size(pnlAddons.Width, Math.Max(60, pnlAddons.Height - 34));
+                // 마지막 열을 남는 폭까지 늘려 머리글에 빈 칸이 생기지 않게 한다
+                int used = 0;
+                for (int i = 0; i < lvAddons.Columns.Count - 1; i++) used += lvAddons.Columns[i].Width;
+                lvAddons.Columns[lvAddons.Columns.Count - 1].Width =
+                    Math.Max(110, lvAddons.Width - used - 20);
+            };
         }
 
-        WowCheck MakeCheck(string text, Point p, bool chk)
+        Check MakeCheck(string text, Point p, bool chk)
         {
-            WowCheck c = new WowCheck();
+            Check c = new Check();
             c.Text = text;
             c.Location = p;
-            c.Size = new Size(440, 22);
-            c.BackColor = ContentBg;
+            c.Size = new Size(460, 24);
             c.Checked = chk;
             return c;
         }
 
-        void EnableFolderDrop(WowField f)
+        void EnableFolderDrop(Field f)
         {
             Control[] targets = { f, f.Box };
             foreach (Control t in targets)
@@ -504,47 +674,59 @@ namespace WowAddonManager
             }
         }
 
-        // ── 하단 ────────────────────────────────────────────────
-        void BuildBottom()
+        // ── 상태 줄 ─────────────────────────────────────────────
+        void BuildStatus()
         {
+            pnlStatus = new Panel();
+            pnlStatus.Dock = DockStyle.Bottom;
+            pnlStatus.Height = 32;
+            pnlStatus.BackColor = Theme.TitleBar;
+            pnlStatus.Paint += delegate (object s, PaintEventArgs e)
+            {
+                using (Pen p = new Pen(Theme.Line))
+                    e.Graphics.DrawLine(p, 0, 0, pnlStatus.Width, 0);
+            };
+            Controls.Add(pnlStatus);
+
             lblStatus = new Label();
             lblStatus.Text = "준비됨";
             lblStatus.AutoSize = false;
-            lblStatus.Height = 18;
-            lblStatus.ForeColor = Theme.TextDim;
-            lblStatus.BackColor = Color.Transparent;
-            Controls.Add(lblStatus);
+            lblStatus.Font = Theme.Small;
+            lblStatus.ForeColor = Theme.TextMuted;
+            lblStatus.BackColor = Theme.TitleBar;
+            lblStatus.Location = new Point(18, 9);
+            lblStatus.Size = new Size(320, 16);
+            pnlStatus.Controls.Add(lblStatus);
 
-            lnkDetail = new GoldLink();
+            bar = new Bar();
+            bar.Location = new Point(350, 14);
+            pnlStatus.Controls.Add(bar);
+
+            lnkDetail = new LinkText();
             lnkDetail.Text = "자세히 ▾";
+            lnkDetail.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            lnkDetail.BackColor = Theme.TitleBar;
             lnkDetail.Click += delegate { ToggleLog(); };
-            Controls.Add(lnkDetail);
-
-            bar = new WowProgress();
-            Controls.Add(bar);
+            pnlStatus.Controls.Add(lnkDetail);
 
             txtLog = new TextBox();
+            txtLog.Dock = DockStyle.Bottom;
+            txtLog.Height = LogH;
             txtLog.Multiline = true;
             txtLog.ReadOnly = true;
             txtLog.ScrollBars = ScrollBars.Vertical;
-            txtLog.BackColor = Theme.Inset;
+            txtLog.BackColor = Color.FromArgb(10, 12, 15);
             txtLog.ForeColor = Theme.TextDim;
             txtLog.Font = Theme.Mono;
-            txtLog.BorderStyle = BorderStyle.FixedSingle;
+            txtLog.BorderStyle = BorderStyle.None;
             txtLog.Visible = false;
             Controls.Add(txtLog);
 
-            tabExport = new WowTab(); tabExport.Text = "내보내기";
-            tabExport.Click += delegate { SetTab(0); };
-            Controls.Add(tabExport);
-
-            tabInstall = new WowTab(); tabInstall.Text = "설치";
-            tabInstall.Click += delegate { SetTab(1); };
-            Controls.Add(tabInstall);
-
-            tabAddons = new WowTab(); tabAddons.Text = "애드온 목록";
-            tabAddons.Click += delegate { SetTab(2); };
-            Controls.Add(tabAddons);
+            pnlStatus.Resize += delegate
+            {
+                lnkDetail.Location = new Point(pnlStatus.Width - lnkDetail.Width - 18, 9);
+                bar.Width = Math.Max(60, lnkDetail.Left - 350 - 20);
+            };
         }
 
         void ToggleLog()
@@ -553,118 +735,30 @@ namespace WowAddonManager
             lnkDetail.Text = logOpen ? "자세히 ▴" : "자세히 ▾";
             txtLog.Visible = logOpen;
             Height += logOpen ? LogH : -LogH;
-            Relayout();
         }
 
         void SetTab(int t)
         {
             if (t < 0 || t > 2) t = 0;
             tab = t;
-            tabExport.Selected = t == 0;
-            tabInstall.Selected = t == 1;
-            tabAddons.Selected = t == 2;
-            tabExport.Invalidate(); tabInstall.Invalidate(); tabAddons.Invalidate();
+            tabs.Selected = t;
+            tabs.Invalidate();
 
             pnlExport.Visible = t == 0;
             pnlInstall.Visible = t == 1;
             pnlAddons.Visible = t == 2;
-
-            headRight.Caption = t == 0 ? "내보내기" : t == 1 ? "설치" : "애드온 목록";
-            headRight.Invalidate();
+            if (t == 0) pnlExport.BringToFront();
+            else if (t == 1) pnlInstall.BringToFront();
+            else pnlAddons.BringToFront();
 
             btnPrimary.Visible = t != 2;
-            btnPrimary.Kind = t == 1 ? BtnKind.Important : BtnKind.Normal;
             btnPrimary.Text = t == 0 ? "내보내기 시작" : "설치 시작";
             btnOpenFolder.Visible = false;
 
             if (t == 1) ShowManifest();
             if (t == 2) RefreshAddons();
             UpdateHints();
-            Relayout();
-        }
-
-        // ── 배치 ────────────────────────────────────────────────
-        void Relayout()
-        {
-            if (fldWow == null || tabAddons == null) return;
-
-            int W = ClientSize.Width;
-            btnClose.Location = new Point(W - 36, 7);
-            btnMin.Location = new Point(W - 64, 8);
-
-            pnlUpdate.Location = new Point(12, 40);
-            pnlUpdate.Width = W - 24;
-            btnUpdateLater.Location = new Point(pnlUpdate.Width - btnUpdateLater.Width - 12, 6);
-            btnUpdateNow.Location = new Point(btnUpdateLater.Left - btnUpdateNow.Width - 8, 6);
-
-            int pathY = pnlUpdate.Visible ? pnlUpdate.Bottom + 8 : 42;
-            btnBrowseWow.Location = new Point(W - 72 - 12, pathY);
-            lblWowState.Location = new Point(btnBrowseWow.Left - lblWowState.Width - 10, pathY + 6);
-            fldWow.Location = new Point(12, pathY);
-            fldWow.Size = new Size(Math.Max(150, lblWowState.Left - 10 - 12), 28);
-
-            int top = ContentTop();
-            int contentH = FrameBottomY - top - 74;
-
-            Rectangle leftRect = new Rectangle(12, top, 288, contentH);
-            lstFlavors.Location = new Point(leftRect.X + 4, leftRect.Y + 36);
-            lstFlavors.Size = new Size(leftRect.Width - 8, leftRect.Height - 40);
-
-            Rectangle rightRect = new Rectangle(leftRect.Right + 10, top, W - leftRect.Right - 24, contentH);
-            pnlRight.Location = new Point(rightRect.X + 14, rightRect.Y + 10);
-            pnlRight.Size = new Size(rightRect.Width - 28, rightRect.Height - 20);
-
-            int rw = pnlRight.Width;
-            headRight.Size = new Size(rw, 28);
-
-            int innerTop = 36;
-            pnlExport.Location = new Point(0, innerTop);
-            pnlExport.Size = new Size(rw, 170);
-            pnlInstall.Location = new Point(0, innerTop);
-            pnlInstall.Size = new Size(rw, 205);
-
-            lblExpDesc.Width = rw;
-            lblInsDesc.Width = rw;
-            fldExportDir.Size = new Size(rw - 86 - 8, 28);
-            btnExportDir.Location = new Point(rw - 86, 72);
-            fldSourceDir.Size = new Size(rw - 86 - 8, 28);
-            btnSourceDir.Location = new Point(rw - 86, 72);
-            lblInsInfo.Width = rw;
-
-            int btnTop = pnlRight.Height - 38;
-            btnOpenFolder.Location = new Point(rw - btnOpenFolder.Width, btnTop);
-            btnPrimary.Width = 220;
-            btnPrimary.Location = new Point((rw - btnPrimary.Width) / 2
-                - (btnOpenFolder.Visible ? btnOpenFolder.Width / 2 + 6 : 0), btnTop);
-            lblHint.Location = new Point(0, btnTop - 24);
-            lblHint.Size = new Size(rw, 20);
-
-            pnlAddons.Location = new Point(0, innerTop);
-            pnlAddons.Size = new Size(rw, btnTop - innerTop + 30);
-            lvAddons.Size = pnlAddons.Size;
-
-            // 상태줄 + 진행 막대 (프레임 안쪽 아래)
-            int sy = FrameBottomY - 64;
-            lblStatus.Location = new Point(16, sy);
-            lblStatus.Width = W - 150;
-            lnkDetail.Location = new Point(W - lnkDetail.Width - 16, sy);
-            lnkUpdate.Location = new Point(lnkDetail.Left - lnkUpdate.Width - 18, sy);
-            bar.Location = new Point(16, sy + 22);
-            bar.Width = W - 32;
-
-            if (logOpen)
-            {
-                txtLog.Location = new Point(16, bar.Bottom + 6);
-                txtLog.Size = new Size(W - 32, FrameBottomY - bar.Bottom - 12);
-            }
-
-            // 하단 탭 (프레임 밖으로 걸침)
-            int tx = 24, ty = FrameBottomY - 2;
-            tabExport.Location = new Point(tx, ty); tabExport.Size = new Size(96, TabH);
-            tabInstall.Location = new Point(tx + 100, ty); tabInstall.Size = new Size(78, TabH);
-            tabAddons.Location = new Point(tx + 182, ty); tabAddons.Size = new Size(110, TabH);
-
-            Invalidate();
+            LayoutFooter();
         }
 
         // ── 경로 / 목록 ─────────────────────────────────────────
@@ -680,21 +774,21 @@ namespace WowAddonManager
             if (p == null)
             {
                 fldWow.Value = "";
-                lblWowState.Text = "찾지 못함";
+                lblWowState.Text = "● 찾지 못함";
                 lblWowState.ForeColor = Theme.Danger;
                 Status("와우 설치 위치를 찾지 못했습니다. '변경'으로 지정하세요.");
                 Log("자동 탐지 실패.");
                 if (verbose) Info("와우 설치 위치를 찾지 못했습니다.\n'변경'을 눌러 폴더를 지정하세요.");
-                Relayout();
+                LayoutPath();
                 return;
             }
 
             fldWow.Value = p;
-            lblWowState.Text = "찾음";
+            lblWowState.Text = "● 찾음";
             lblWowState.ForeColor = Theme.Ok;
             Log("와우 위치: " + p);
             LoadFlavors();
-            Relayout();
+            LayoutPath();
         }
 
         void BrowseWow()
@@ -709,10 +803,10 @@ namespace WowAddonManager
                 return;
             }
             fldWow.Value = root;
-            lblWowState.Text = "찾음";
+            lblWowState.Text = "● 찾음";
             lblWowState.ForeColor = Theme.Ok;
             LoadFlavors();
-            Relayout();
+            LayoutPath();
         }
 
         void LoadFlavors()
@@ -760,14 +854,10 @@ namespace WowAddonManager
 
             if (fldWow.Value.Length == 0) { lblHint.Text = ""; btnPrimary.Enabled = false; return; }
 
-            if (tab == 2)
-                lblHint.Text = "";
-            else if (sel.Count == 0)
-                lblHint.Text = "왼쪽에서 버전을 하나 이상 체크하세요.";
-            else if (tab == 0)
-                lblHint.Text = "선택한 " + sel.Count + "개 버전, 애드온 " + addons + "개를 묶습니다.";
-            else
-                lblHint.Text = "선택한 " + sel.Count + "개 버전에 설치합니다.";
+            if (tab == 2) lblHint.Text = "";
+            else if (sel.Count == 0) lblHint.Text = "왼쪽에서 게임 버전을 하나 이상 선택하세요.";
+            else if (tab == 0) lblHint.Text = "선택한 " + sel.Count + "개 버전, 애드온 " + addons + "개를 묶습니다.";
+            else lblHint.Text = "선택한 " + sel.Count + "개 버전에 설치합니다.";
 
             btnPrimary.Enabled = sel.Count > 0;
         }
@@ -779,7 +869,7 @@ namespace WowAddonManager
             {
                 ManifestInfo mi = WowCore.ReadManifest(fldSourceDir.Value);
                 List<string> names = new List<string>();
-                foreach (string k in mi.Flavors.Keys) names.Add(FlavorList.FriendlyName(k));
+                foreach (string k in mi.Flavors.Keys) names.Add(VersionList.FlavorName(k));
                 lblInsInfo.ForeColor = Theme.Ok;
                 lblInsInfo.Text = mi.SourcePC + " 에서 내보냄 · " + string.Join(", ", names.ToArray())
                     + (mi.HasSettings ? " · 설정 포함" : " · 설정 없음");
@@ -845,15 +935,15 @@ namespace WowAddonManager
             if (names.Count == 0)
             {
                 List<string> have = new List<string>();
-                foreach (string k in mi.Flavors.Keys) have.Add(FlavorList.FriendlyName(k));
+                foreach (string k in mi.Flavors.Keys) have.Add(VersionList.FlavorName(k));
                 Info("설치할 버전이 없습니다.\n\n가져올 폴더에 들어있는 버전: "
                      + string.Join(", ", have.ToArray())
-                     + "\n왼쪽 목록에서 같은 버전을 체크하세요.");
+                     + "\n왼쪽 목록에서 같은 버전을 선택하세요.");
                 return;
             }
 
             List<string> friendly = new List<string>();
-            foreach (string n in names) friendly.Add(FlavorList.FriendlyName(n));
+            foreach (string n in names) friendly.Add(VersionList.FlavorName(n));
 
             string msg = string.Join(", ", friendly.ToArray()) + " 에 설치합니다.\n\n"
                 + "대상: " + fldWow.Value + "\n\n"
@@ -939,8 +1029,8 @@ namespace WowAddonManager
                             Log("완료.");
                             Status("완료되었습니다.");
                             btnOpenFolder.Visible = showOpenFolder;
+                            LayoutFooter();
                             LoadFlavors();
-                            Relayout();
                             MessageBox.Show(this, doneMessage, "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         }
                     });
@@ -956,11 +1046,9 @@ namespace WowAddonManager
             btnPrimary.Enabled = !busy;
             btnBrowseWow.Enabled = !busy;
             lstFlavors.Enabled = !busy;
+            tabs.Enabled = !busy;
             pnlExport.Enabled = !busy;
             pnlInstall.Enabled = !busy;
-            tabExport.Enabled = !busy;
-            tabInstall.Enabled = !busy;
-            tabAddons.Enabled = !busy;
             Cursor = busy ? Cursors.AppStarting : Cursors.Default;
             if (busy) { bar.Value = 0; btnOpenFolder.Visible = false; }
         }
@@ -993,7 +1081,6 @@ namespace WowAddonManager
                         pendingUpdate = r;
                         lblUpdateText.Text = "새 버전 v" + r.Version + " 이(가) 나왔습니다. (지금 v" + AppInfo.Version + ")";
                         pnlUpdate.Visible = true;
-                        Relayout();
                     });
                 }
                 catch { }
@@ -1024,7 +1111,6 @@ namespace WowAddonManager
                             pendingUpdate = r;
                             lblUpdateText.Text = "새 버전 v" + r.Version + " 이(가) 나왔습니다. (지금 v" + AppInfo.Version + ")";
                             pnlUpdate.Visible = true;
-                            Relayout();
                             Status("새 버전 v" + r.Version + " 이(가) 있습니다.");
                         }
                         else

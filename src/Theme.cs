@@ -1,63 +1,42 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace WowAddonManager
 {
-    /// <summary>
-    /// 와우 게임 UI 를 본뜬 테마.
-    /// 어두운 청회색 패널 + 두꺼운 금색 장식 테두리 + 가운데 제목 명판 + 하단 탭.
-    /// </summary>
+    /// <summary>배틀넷 런처 톤 — 어두운 평면 배경, 파란 강조색, 둥근 모서리</summary>
     public static class Theme
     {
-        // 패널 / 바탕
-        public static readonly Color FrameTop = Color.FromArgb(44, 44, 54);
-        public static readonly Color FrameBottom = Color.FromArgb(20, 20, 27);
-        public static readonly Color Inset = Color.FromArgb(13, 13, 18);
-        public static readonly Color InsetAlt = Color.FromArgb(24, 24, 32);
-        public static readonly Color Hover = Color.FromArgb(44, 46, 62);
+        public static readonly Color Window = Color.FromArgb(19, 21, 25);
+        public static readonly Color TitleBar = Color.FromArgb(13, 15, 18);
+        public static readonly Color Side = Color.FromArgb(15, 17, 21);
+        public static readonly Color Panel = Color.FromArgb(18, 20, 25);
+        public static readonly Color Line = Color.FromArgb(31, 35, 41);
+        public static readonly Color Field = Color.FromArgb(12, 14, 18);
+        public static readonly Color FieldLine = Color.FromArgb(34, 39, 49);
+        public static readonly Color Ghost = Color.FromArgb(27, 31, 38);
+        public static readonly Color GhostLine = Color.FromArgb(42, 48, 58);
+        public static readonly Color GhostHover = Color.FromArgb(35, 40, 49);
+        public static readonly Color RowSel = Color.FromArgb(27, 36, 48);
+        public static readonly Color RowHover = Color.FromArgb(23, 26, 33);
 
-        // 금색 테두리 3단
-        public static readonly Color GoldLight = Color.FromArgb(201, 170, 113);
-        public static readonly Color GoldMid = Color.FromArgb(139, 117, 54);
-        public static readonly Color GoldDarkLine = Color.FromArgb(74, 60, 30);
-        public static readonly Color EdgeBlack = Color.FromArgb(6, 6, 9);
+        public static readonly Color Accent = Color.FromArgb(27, 133, 232);
+        public static readonly Color AccentHover = Color.FromArgb(56, 152, 240);
+        public static readonly Color AccentDown = Color.FromArgb(20, 108, 192);
+        public static readonly Color AccentSoft = Color.FromArgb(31, 79, 134);
+        public static readonly Color AccentLine = Color.FromArgb(45, 108, 168);
+        public static readonly Color AccentText = Color.FromArgb(158, 208, 255);
 
-        // 글자
-        public static readonly Color Gold = Color.FromArgb(255, 209, 110);
-        public static readonly Color GoldBright = Color.FromArgb(255, 231, 160);
-        public static readonly Color GoldDim = Color.FromArgb(178, 150, 98);
-        public static readonly Color Text = Color.FromArgb(226, 224, 216);
-        public static readonly Color TextDim = Color.FromArgb(154, 152, 146);
-        public static readonly Color TextMuted = Color.FromArgb(108, 107, 104);
+        public static readonly Color Text = Color.FromArgb(230, 232, 236);
+        public static readonly Color TextSoft = Color.FromArgb(185, 192, 203);
+        public static readonly Color TextDim = Color.FromArgb(130, 139, 153);
+        public static readonly Color TextMuted = Color.FromArgb(108, 116, 131);
+        public static readonly Color TextOff = Color.FromArgb(78, 86, 99);
 
-        // 강조
-        public static readonly Color SelBlueTop = Color.FromArgb(38, 74, 126);
-        public static readonly Color SelBlueBottom = Color.FromArgb(20, 40, 72);
-        public static readonly Color SelEdge = Color.FromArgb(96, 158, 224);
-        public static readonly Color Red = Color.FromArgb(166, 44, 44);
-        public static readonly Color RedBright = Color.FromArgb(214, 72, 72);
-        public static readonly Color Ok = Color.FromArgb(104, 196, 104);
-        public static readonly Color Danger = Color.FromArgb(226, 96, 96);
-
-        static FontFamily serif;
-
-        /// <summary>와우 제목 느낌의 세리프 글꼴 (한글 포함)</summary>
-        public static Font Serif(float size, FontStyle style)
-        {
-            if (serif == null)
-            {
-                foreach (string n in new string[] { "바탕", "Batang", "궁서", "Georgia", "Times New Roman" })
-                {
-                    try { serif = new FontFamily(n); break; }
-                    catch { }
-                }
-                if (serif == null) serif = FontFamily.GenericSerif;
-            }
-            try { return new Font(serif, size, style); }
-            catch { return new Font(FontFamily.GenericSerif, size, style); }
-        }
+        public static readonly Color Ok = Color.FromArgb(63, 191, 106);
+        public static readonly Color Danger = Color.FromArgb(222, 92, 92);
 
         public static Font F(float size, FontStyle style)
         {
@@ -68,15 +47,15 @@ namespace WowAddonManager
         public static Font Body { get { return F(9f, FontStyle.Regular); } }
         public static Font BodyBold { get { return F(9f, FontStyle.Bold); } }
         public static Font Small { get { return F(8.25f, FontStyle.Regular); } }
+        public static Font Tiny { get { return F(7.5f, FontStyle.Bold); } }
+        public static Font H1 { get { return F(13f, FontStyle.Bold); } }
+        public static Font H2 { get { return F(10.5f, FontStyle.Bold); } }
         public static Font Mono { get { return new Font("Consolas", 8.5f); } }
-        public static Font TitleFont { get { return Serif(12f, FontStyle.Bold); } }
-        public static Font HeadFont { get { return Serif(13f, FontStyle.Bold); } }
-        public static Font TabFont { get { return F(9f, FontStyle.Bold); } }
 
-        public static GraphicsPath RoundRect(Rectangle r, int radius)
+        public static GraphicsPath Round(Rectangle r, int radius)
         {
             GraphicsPath p = new GraphicsPath();
-            int d = Math.Max(1, radius * 2);
+            int d = radius * 2;
             if (radius <= 0) { p.AddRectangle(r); return p; }
             p.AddArc(r.X, r.Y, d, d, 180, 90);
             p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
@@ -86,216 +65,51 @@ namespace WowAddonManager
             return p;
         }
 
-        public static void FillV(Graphics g, Rectangle r, Color top, Color bottom)
+        public static void FillRound(Graphics g, Rectangle r, int radius, Color fill)
         {
             if (r.Width <= 0 || r.Height <= 0) return;
-            using (LinearGradientBrush b = new LinearGradientBrush(
-                       new Rectangle(r.X, r.Y, r.Width, r.Height + 1), top, bottom, 90f))
-                g.FillRectangle(b, r);
-        }
-
-        /// <summary>창 전체를 감싸는 두꺼운 금색 장식 테두리</summary>
-        public static void DrawOrnateFrame(Graphics g, Rectangle r)
-        {
+            SmoothingMode old = g.SmoothingMode;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-
-            // 바탕
-            FillV(g, r, FrameTop, FrameBottom);
-
-            // 바깥 검정 1px → 금색 2px → 안쪽 검정 1px (게임 창과 같은 얇은 3단)
-            using (Pen p = new Pen(EdgeBlack))
-                g.DrawRectangle(p, r);
-            using (LinearGradientBrush lb = new LinearGradientBrush(
-                       new Rectangle(r.X, r.Y, r.Width, r.Height + 1),
-                       Color.FromArgb(186, 156, 98), Color.FromArgb(108, 88, 44), 90f))
-            using (Pen p = new Pen(lb, 2f))
-                g.DrawRectangle(p, r.X + 2, r.Y + 2, r.Width - 4, r.Height - 4);
-            using (Pen p = new Pen(EdgeBlack))
-                g.DrawRectangle(p, r.X + 4, r.Y + 4, r.Width - 8, r.Height - 8);
-
-            // 네 귀퉁이 장식
-            int c = 18;
-            DrawCorner(g, new Rectangle(r.X + 1, r.Y + 1, c, c), 0);
-            DrawCorner(g, new Rectangle(r.Right - c - 1, r.Y + 1, c, c), 90);
-            DrawCorner(g, new Rectangle(r.Right - c - 1, r.Bottom - c - 1, c, c), 180);
-            DrawCorner(g, new Rectangle(r.X + 1, r.Bottom - c - 1, c, c), 270);
-
-            g.SmoothingMode = SmoothingMode.Default;
+            using (GraphicsPath p = Round(r, radius))
+            using (SolidBrush b = new SolidBrush(fill))
+                g.FillPath(b, p);
+            g.SmoothingMode = old;
         }
 
-        static void DrawCorner(Graphics g, Rectangle r, float rotate)
+        public static void DrawRound(Graphics g, Rectangle r, int radius, Color fill, Color line)
         {
-            GraphicsState st = g.Save();
-            g.TranslateTransform(r.X + r.Width / 2f, r.Y + r.Height / 2f);
-            g.RotateTransform(rotate);
-            g.TranslateTransform(-r.Width / 2f, -r.Height / 2f);
-
-            using (LinearGradientBrush b = new LinearGradientBrush(
-                       new Rectangle(0, 0, r.Width, r.Height),
-                       Color.FromArgb(214, 186, 128), Color.FromArgb(120, 98, 48), 45f))
+            if (r.Width <= 0 || r.Height <= 0) return;
+            SmoothingMode old = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle rr = new Rectangle(r.X, r.Y, r.Width - 1, r.Height - 1);
+            using (GraphicsPath p = Round(rr, radius))
             {
-                g.FillPolygon(b, new Point[] {
-                    new Point(0, 0), new Point(r.Width, 0),
-                    new Point(r.Width - 7, 7), new Point(7, 7),
-                    new Point(7, r.Height - 7), new Point(0, r.Height) });
+                if (fill.A > 0) using (SolidBrush b = new SolidBrush(fill)) g.FillPath(b, p);
+                if (line.A > 0) using (Pen pen = new Pen(line)) g.DrawPath(pen, p);
             }
-            using (Pen p = new Pen(EdgeBlack))
-                g.DrawPolygon(p, new Point[] {
-                    new Point(0, 0), new Point(r.Width, 0),
-                    new Point(r.Width - 7, 7), new Point(7, 7),
-                    new Point(7, r.Height - 7), new Point(0, r.Height) });
-
-            g.Restore(st);
-        }
-
-        /// <summary>움푹 들어간 영역 (목록·입력란)</summary>
-        public static void DrawInset(Graphics g, Rectangle r, bool focus)
-        {
-            FillV(g, r, Inset, Color.FromArgb(20, 20, 27));
-            using (Pen p = new Pen(EdgeBlack)) g.DrawRectangle(p, r);
-            using (Pen p = new Pen(focus ? GoldLight : GoldDarkLine))
-                g.DrawRectangle(p, r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2);
-        }
-
-        /// <summary>가운데 제목 명판 — 창 폭을 가로지르는 가늘고 긴 판</summary>
-        public static void DrawTitlePlate(Graphics g, Rectangle r, string text)
-        {
-            FillV(g, r, Color.FromArgb(34, 33, 30), Color.FromArgb(18, 17, 15));
-            using (Pen p = new Pen(EdgeBlack)) g.DrawRectangle(p, r);
-            using (Pen p = new Pen(GoldMid))
-                g.DrawRectangle(p, r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2);
-            using (Pen p = new Pen(Color.FromArgb(60, 255, 226, 160)))
-                g.DrawLine(p, r.X + 2, r.Y + 2, r.Right - 2, r.Y + 2);
-
-            TextRenderer.DrawText(g, text, TitleFont, r, Gold,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-        }
-
-        /// <summary>금색 테두리 원형 아이콘 자리</summary>
-        public static void DrawPortraitRing(Graphics g, Rectangle r)
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (SolidBrush b = new SolidBrush(Color.FromArgb(16, 16, 22)))
-                g.FillEllipse(b, r);
-            using (Pen p = new Pen(EdgeBlack, 3f)) g.DrawEllipse(p, r);
-            using (LinearGradientBrush lb = new LinearGradientBrush(
-                       r, Color.FromArgb(222, 196, 140), Color.FromArgb(118, 96, 46), 90f))
-            using (Pen p = new Pen(lb, 3f))
-                g.DrawEllipse(p, new Rectangle(r.X + 2, r.Y + 2, r.Width - 4, r.Height - 4));
-            g.SmoothingMode = SmoothingMode.Default;
-        }
-
-        /// <summary>목록 행에 쓰는 원형 배지</summary>
-        public static void DrawBadge(Graphics g, Rectangle r, string glyph, bool selected, bool dim)
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (LinearGradientBrush b = new LinearGradientBrush(r,
-                       selected ? Color.FromArgb(52, 90, 142) : Color.FromArgb(46, 46, 58),
-                       selected ? Color.FromArgb(22, 44, 76) : Color.FromArgb(22, 22, 30), 90f))
-                g.FillEllipse(b, r);
-            using (Pen p = new Pen(EdgeBlack, 2f)) g.DrawEllipse(p, r);
-            using (Pen p = new Pen(dim ? GoldDarkLine : selected ? GoldLight : GoldMid, 2f))
-                g.DrawEllipse(p, new Rectangle(r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2));
-
-            TextRenderer.DrawText(g, glyph, F(11f, FontStyle.Bold), r,
-                dim ? TextMuted : selected ? GoldBright : GoldDim,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-            g.SmoothingMode = SmoothingMode.Default;
+            g.SmoothingMode = old;
         }
     }
 
     // ────────────────────────────────────────────────────────────
-    /// <summary>창 오른쪽 위 빨간 닫기 단추</summary>
-    public class RedCloseButton : Control
+    public enum BtnKind { Ghost, Primary, Danger }
+
+    public class FlatBtn : Button
     {
-        bool hover;
-
-        public RedCloseButton()
-        {
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
-                     ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
-            Size = new Size(26, 26);
-            Cursor = Cursors.Hand;
-        }
-
-        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            Graphics g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle r = new Rectangle(1, 1, Width - 3, Height - 3);
-
-            using (LinearGradientBrush b = new LinearGradientBrush(r,
-                       hover ? Color.FromArgb(226, 86, 86) : Theme.RedBright,
-                       hover ? Color.FromArgb(150, 32, 32) : Theme.Red, 90f))
-                g.FillEllipse(b, r);
-            using (Pen p = new Pen(Theme.EdgeBlack, 2f)) g.DrawEllipse(p, r);
-            using (Pen p = new Pen(Color.FromArgb(240, 190, 190), 2f))
-            {
-                int m = 8;
-                g.DrawLine(p, r.X + m, r.Y + m, r.Right - m, r.Bottom - m);
-                g.DrawLine(p, r.Right - m, r.Y + m, r.X + m, r.Bottom - m);
-            }
-        }
-    }
-
-    /// <summary>창 최소화 단추 (작은 금색 테두리 원)</summary>
-    public class MinButton : Control
-    {
-        bool hover;
-
-        public MinButton()
-        {
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
-                     ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
-            Size = new Size(24, 24);
-            Cursor = Cursors.Hand;
-        }
-
-        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            Graphics g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle r = new Rectangle(1, 1, Width - 3, Height - 3);
-            using (LinearGradientBrush b = new LinearGradientBrush(r,
-                       Color.FromArgb(56, 56, 68), Color.FromArgb(24, 24, 32), 90f))
-                g.FillEllipse(b, r);
-            using (Pen p = new Pen(Theme.EdgeBlack, 2f)) g.DrawEllipse(p, r);
-            using (Pen p = new Pen(hover ? Theme.GoldLight : Theme.GoldMid, 2f))
-                g.DrawEllipse(p, new Rectangle(r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2));
-            using (Pen p = new Pen(hover ? Theme.GoldBright : Theme.GoldDim, 2f))
-                g.DrawLine(p, r.X + 7, r.Y + r.Height / 2, r.Right - 7, r.Y + r.Height / 2);
-        }
-    }
-
-    public enum BtnKind { Normal, Important }
-
-    /// <summary>와우식 단추 — 어두운 금속판 + 금색(또는 붉은) 테두리</summary>
-    public class WowButton : Button
-    {
-        public BtnKind Kind = BtnKind.Normal;
+        public BtnKind Kind = BtnKind.Ghost;
+        public int Radius = 6;
         bool hover, down;
 
-        public WowButton()
+        public FlatBtn()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
-                     ControlStyles.SupportsTransparentBackColor, true);
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             FlatStyle = FlatStyle.Flat;
             FlatAppearance.BorderSize = 0;
-            BackColor = Color.Transparent;
+            BackColor = Theme.Panel;
             Font = Theme.Body;
             Cursor = Cursors.Hand;
-            Height = 30;
+            Height = 32;
         }
 
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -306,53 +120,50 @@ namespace WowAddonManager
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
-            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+            g.Clear(BackColor);
+            Rectangle r = new Rectangle(0, 0, Width, Height);
 
-            Color t, b2, line, text;
+            Color fill, line, fg;
             if (!Enabled)
             {
-                t = Color.FromArgb(34, 34, 42); b2 = Color.FromArgb(24, 24, 30);
-                line = Color.FromArgb(62, 60, 54); text = Theme.TextMuted;
+                fill = Color.FromArgb(24, 27, 33); line = Color.FromArgb(34, 38, 46); fg = Theme.TextOff;
             }
-            else if (Kind == BtnKind.Important)
+            else if (Kind == BtnKind.Primary)
             {
-                t = down ? Color.FromArgb(40, 30, 32) : hover ? Color.FromArgb(62, 44, 46) : Color.FromArgb(50, 36, 38);
-                b2 = down ? Color.FromArgb(24, 18, 19) : hover ? Color.FromArgb(34, 24, 25) : Color.FromArgb(26, 19, 20);
-                line = hover ? Theme.RedBright : Theme.Red;
-                text = hover ? Color.FromArgb(255, 220, 220) : Color.FromArgb(240, 196, 196);
+                fill = down ? Theme.AccentDown : hover ? Theme.AccentHover : Theme.Accent;
+                line = fill; fg = Color.White;
+            }
+            else if (Kind == BtnKind.Danger)
+            {
+                fill = down ? Color.FromArgb(132, 44, 44) : hover ? Color.FromArgb(186, 62, 62) : Color.FromArgb(162, 52, 52);
+                line = fill; fg = Color.White;
             }
             else
             {
-                t = down ? Color.FromArgb(32, 32, 42) : hover ? Color.FromArgb(58, 58, 72) : Color.FromArgb(46, 46, 58);
-                b2 = down ? Color.FromArgb(20, 20, 27) : hover ? Color.FromArgb(28, 28, 37) : Color.FromArgb(22, 22, 30);
-                line = hover ? Theme.GoldLight : Theme.GoldMid;
-                text = hover ? Theme.GoldBright : Theme.Gold;
+                fill = down ? Color.FromArgb(22, 25, 31) : hover ? Theme.GhostHover : Theme.Ghost;
+                line = hover ? Color.FromArgb(58, 66, 78) : Theme.GhostLine;
+                fg = hover ? Theme.Text : Theme.TextSoft;
             }
 
-            Theme.FillV(g, r, t, b2);
-            using (Pen p = new Pen(Theme.EdgeBlack)) g.DrawRectangle(p, r);
-            using (Pen p = new Pen(line)) g.DrawRectangle(p, r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2);
-
-            TextRenderer.DrawText(g, Text, Font, r, text,
+            Theme.DrawRound(g, r, Radius, fill, line);
+            TextRenderer.DrawText(g, Text, Font, r, fg,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         }
     }
 
-    /// <summary>창 아래쪽 탭 (와우 창 하단 탭과 같은 모양)</summary>
-    public class WowTab : Control
+    /// <summary>창 단추 (최소화 / 닫기)</summary>
+    public class SysBtn : Control
     {
-        public bool Selected;
+        public bool IsClose;
         bool hover;
 
-        public WowTab()
+        public SysBtn()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
-                     ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            Size = new Size(34, 28);
+            BackColor = Theme.TitleBar;
             Cursor = Cursors.Hand;
-            Height = 30;
-            Font = Theme.TabFont;
         }
 
         protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -361,135 +172,121 @@ namespace WowAddonManager
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
+            g.Clear(BackColor);
+            if (hover)
+                Theme.FillRound(g, new Rectangle(0, 0, Width, Height), 5,
+                    IsClose ? Color.FromArgb(196, 48, 58) : Color.FromArgb(28, 32, 39));
+
+            Color fg = hover ? Color.White : Theme.TextDim;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
-
-            using (GraphicsPath p = new GraphicsPath())
+            int cx = Width / 2, cy = Height / 2;
+            using (Pen p = new Pen(fg, 1.4f))
             {
-                int d = 10;
-                p.AddLine(r.X, r.Y, r.Right, r.Y);
-                p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-                p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-                p.CloseFigure();
-
-                using (LinearGradientBrush b = new LinearGradientBrush(
-                           new Rectangle(r.X, r.Y, r.Width, r.Height + 1),
-                           Selected ? Color.FromArgb(60, 60, 74) : hover ? Color.FromArgb(44, 44, 56) : Color.FromArgb(32, 32, 41),
-                           Selected ? Color.FromArgb(28, 28, 38) : Color.FromArgb(18, 18, 24), 90f))
-                    g.FillPath(b, p);
-
-                using (Pen pen = new Pen(Theme.EdgeBlack, 2f)) g.DrawPath(pen, p);
-                using (Pen pen = new Pen(Selected ? Theme.GoldLight : Theme.GoldDarkLine,
-                                         Selected ? 2f : 1f))
-                    g.DrawPath(pen, p);
+                if (IsClose)
+                {
+                    g.DrawLine(p, cx - 5, cy - 5, cx + 5, cy + 5);
+                    g.DrawLine(p, cx + 5, cy - 5, cx - 5, cy + 5);
+                }
+                else g.DrawLine(p, cx - 5, cy, cx + 5, cy);
             }
-
-            TextRenderer.DrawText(g, Text, Font, r,
-                Selected ? Theme.GoldBright : hover ? Theme.Gold : Theme.TextDim,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             g.SmoothingMode = SmoothingMode.Default;
         }
     }
 
-    /// <summary>체크 상자</summary>
-    public class WowCheck : CheckBox
+    /// <summary>밑줄 탭 띠</summary>
+    public class TabStrip : Control
     {
-        bool hover;
+        public string[] Items = new string[0];
+        public int Selected;
+        int hoverIndex = -1;
+        readonly List<Rectangle> hit = new List<Rectangle>();
 
-        public WowCheck()
+        public event EventHandler SelectedChanged;
+
+        public TabStrip()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
-                     ControlStyles.SupportsTransparentBackColor, true);
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            BackColor = Theme.Panel;
+            Height = 40;
             Font = Theme.Body;
-            ForeColor = Theme.Text;
-            BackColor = Color.Transparent;
             Cursor = Cursors.Hand;
-            AutoSize = false;
-            Height = 22;
         }
 
-        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
-
-        protected override void OnPaint(PaintEventArgs e)
+        protected override void OnMouseMove(MouseEventArgs e)
         {
-            Graphics g = e.Graphics;
-            if (BackColor != Color.Transparent) g.Clear(BackColor);
-            Rectangle box = new Rectangle(0, (Height - 16) / 2, 16, 16);
-            Theme.FillV(g, box, Color.FromArgb(30, 30, 40), Color.FromArgb(14, 14, 20));
-            using (Pen p = new Pen(Theme.EdgeBlack)) g.DrawRectangle(p, box);
-            using (Pen p = new Pen(hover && Enabled ? Theme.GoldLight : Theme.GoldMid))
-                g.DrawRectangle(p, box.X + 1, box.Y + 1, box.Width - 2, box.Height - 2);
+            int idx = -1;
+            for (int i = 0; i < hit.Count; i++) if (hit[i].Contains(e.Location)) { idx = i; break; }
+            if (idx != hoverIndex) { hoverIndex = idx; Invalidate(); }
+            base.OnMouseMove(e);
+        }
 
-            if (Checked)
-            {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                using (Pen p = new Pen(Enabled ? Theme.GoldBright : Theme.TextMuted, 2.2f))
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            hoverIndex = -1; Invalidate(); base.OnMouseLeave(e);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            for (int i = 0; i < hit.Count; i++)
+                if (hit[i].Contains(e.Location))
                 {
-                    g.DrawLine(p, box.X + 3, box.Y + 8, box.X + 6, box.Y + 12);
-                    g.DrawLine(p, box.X + 6, box.Y + 12, box.X + 13, box.Y + 4);
+                    if (Selected != i)
+                    {
+                        Selected = i;
+                        Invalidate();
+                        if (SelectedChanged != null) SelectedChanged(this, EventArgs.Empty);
+                    }
+                    break;
                 }
-                g.SmoothingMode = SmoothingMode.Default;
-            }
-
-            Color c = !Enabled ? Theme.TextMuted : hover ? Theme.Gold : ForeColor;
-            TextRenderer.DrawText(g, Text, Font, new Rectangle(24, 0, Width - 24, Height), c,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-        }
-    }
-
-    /// <summary>진행 막대 — 움푹 들어간 홈에 금색이 찬다</summary>
-    public class WowProgress : Control
-    {
-        int val;
-        public int Value
-        {
-            get { return val; }
-            set { val = Math.Max(0, Math.Min(100, value)); Invalidate(); }
-        }
-
-        public WowProgress()
-        {
-            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
-                     ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
-            Height = 16;
+            base.OnMouseDown(e);
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
-            Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
-            Theme.DrawInset(g, r, false);
+            g.Clear(BackColor);
+            hit.Clear();
 
-            if (val > 0)
+            int x = 18;
+            for (int i = 0; i < Items.Length; i++)
             {
-                int w = (int)((Width - 6) * (val / 100.0));
-                Rectangle f = new Rectangle(3, 3, Math.Max(1, w), Height - 7);
-                Theme.FillV(g, f, Color.FromArgb(236, 186, 78), Color.FromArgb(142, 100, 24));
-                using (Pen p = new Pen(Color.FromArgb(255, 230, 160)))
-                    g.DrawLine(p, f.X, f.Y, f.Right - 1, f.Y);
+                bool sel = i == Selected;
+                Font f = sel ? Theme.BodyBold : Font;
+                Size sz = TextRenderer.MeasureText(g, Items[i], f);
+                Rectangle area = new Rectangle(x, 0, sz.Width + 6, Height);
+                hit.Add(area);
+
+                Color fg = sel ? Color.White : i == hoverIndex ? Theme.TextSoft : Theme.TextDim;
+                TextRenderer.DrawText(g, Items[i], f, area, fg,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+
+                if (sel)
+                    using (SolidBrush b = new SolidBrush(Theme.Accent))
+                        g.FillRectangle(b, area.X, Height - 2, area.Width, 2);
+
+                x = area.Right + 20;
             }
+
+            using (Pen p = new Pen(Theme.Line))
+                g.DrawLine(p, 0, Height - 1, Width, Height - 1);
         }
     }
 
-    /// <summary>버전 목록 — 원형 배지 + 이름 + 애드온 개수 (CheckedListBox 는 행 높이를 못 바꿔서 직접 그린다)</summary>
-    public class FlavorList : ListBox
+    /// <summary>좌측 게임 버전 목록</summary>
+    public class VersionList : ListBox
     {
-        readonly System.Collections.Generic.HashSet<int> checkedSet =
-            new System.Collections.Generic.HashSet<int>();
+        readonly HashSet<int> checkedSet = new HashSet<int>();
         int hoverIndex = -1;
 
         public event EventHandler CheckChanged;
 
-        public FlavorList()
+        public VersionList()
         {
             DrawMode = DrawMode.OwnerDrawFixed;
-            ItemHeight = 50;
+            ItemHeight = 52;
             BorderStyle = BorderStyle.None;
-            BackColor = Theme.Inset;
+            BackColor = Theme.Side;
             ForeColor = Theme.Text;
             IntegralHeight = false;
             Font = Theme.Body;
@@ -501,18 +298,11 @@ namespace WowAddonManager
             if (chk) checkedSet.Add(i);
         }
 
-        public void ClearItems()
-        {
-            Items.Clear();
-            checkedSet.Clear();
-        }
+        public void ClearItems() { Items.Clear(); checkedSet.Clear(); }
 
-        public bool IsChecked(int i) { return checkedSet.Contains(i); }
-
-        public System.Collections.Generic.List<Flavor> CheckedFlavors()
+        public List<Flavor> CheckedFlavors()
         {
-            System.Collections.Generic.List<Flavor> list =
-                new System.Collections.Generic.List<Flavor>();
+            List<Flavor> list = new List<Flavor>();
             for (int i = 0; i < Items.Count; i++)
                 if (checkedSet.Contains(i)) list.Add((Flavor)Items[i]);
             return list;
@@ -523,8 +313,7 @@ namespace WowAddonManager
             int i = IndexFromPoint(e.Location);
             if (i >= 0 && i < Items.Count)
             {
-                if (checkedSet.Contains(i)) checkedSet.Remove(i);
-                else checkedSet.Add(i);
+                if (checkedSet.Contains(i)) checkedSet.Remove(i); else checkedSet.Add(i);
                 Invalidate();
                 if (CheckChanged != null) CheckChanged(this, EventArgs.Empty);
             }
@@ -540,56 +329,72 @@ namespace WowAddonManager
 
         protected override void OnMouseLeave(EventArgs e)
         {
-            hoverIndex = -1;
-            Invalidate();
-            base.OnMouseLeave(e);
+            hoverIndex = -1; Invalidate(); base.OnMouseLeave(e);
         }
 
         protected override void OnDrawItem(DrawItemEventArgs e)
         {
             if (e.Index < 0 || e.Index >= Items.Count) return;
             Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
             Flavor f = Items[e.Index] as Flavor;
             bool sel = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
             bool usable = f != null && f.AddOnCount > 0;
             bool chk = checkedSet.Contains(e.Index);
             Rectangle b = e.Bounds;
 
+            using (SolidBrush br = new SolidBrush(Theme.Side)) g.FillRectangle(br, b);
+
+            Rectangle card = new Rectangle(b.X + 6, b.Y + 2, b.Width - 12, b.Height - 4);
             if (sel)
             {
-                Theme.FillV(g, b, Theme.SelBlueTop, Theme.SelBlueBottom);
-                using (Pen p = new Pen(Theme.SelEdge))
-                {
-                    g.DrawLine(p, b.X, b.Y, b.Right, b.Y);
-                    g.DrawLine(p, b.X, b.Bottom - 1, b.Right, b.Bottom - 1);
-                }
+                Theme.FillRound(g, card, 7, Theme.RowSel);
+                using (SolidBrush br = new SolidBrush(Theme.Accent))
+                    g.FillRectangle(br, card.X, card.Y + 3, 2, card.Height - 6);
             }
             else if (e.Index == hoverIndex)
-            {
-                using (SolidBrush br = new SolidBrush(Theme.Hover)) g.FillRectangle(br, b);
-            }
-            else
-            {
-                using (SolidBrush br = new SolidBrush(Theme.Inset)) g.FillRectangle(br, b);
-            }
+                Theme.FillRound(g, card, 7, Theme.RowHover);
 
-            Rectangle badge = new Rectangle(b.X + 10, b.Y + 7, 36, 36);
-            Theme.DrawBadge(g, badge, chk ? "✓" : "", sel, !usable);
+            // 네모난 게임 아이콘
+            Rectangle ico = new Rectangle(card.X + 10, card.Y + (card.Height - 32) / 2, 32, 32);
+            Theme.DrawRound(g, ico, 7,
+                sel ? Theme.AccentSoft : usable ? Color.FromArgb(39, 45, 56) : Color.FromArgb(33, 38, 46),
+                sel ? Theme.AccentLine : usable ? Color.FromArgb(44, 51, 63) : Color.FromArgb(36, 42, 51));
+            string initial = FriendlyInitial(f != null ? f.Name : "");
+            TextRenderer.DrawText(g, initial, Theme.BodyBold, ico,
+                sel ? Theme.AccentText : usable ? Theme.TextDim : Theme.TextOff,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
 
-            TextRenderer.DrawText(g, FriendlyName(f != null ? f.Name : ""), Theme.BodyBold,
-                new Rectangle(b.X + 56, b.Y + 8, b.Width - 64, 18),
-                usable ? (sel ? Theme.GoldBright : Theme.Text) : Theme.TextMuted,
+            // 체크 상자
+            Rectangle box = new Rectangle(card.Right - 26, card.Y + (card.Height - 16) / 2, 16, 16);
+            if (chk)
+            {
+                Theme.DrawRound(g, box, 4, Theme.Accent, Theme.Accent);
+                using (Pen p = new Pen(Color.White, 1.8f))
+                {
+                    g.DrawLine(p, box.X + 4, box.Y + 8, box.X + 7, box.Y + 11);
+                    g.DrawLine(p, box.X + 7, box.Y + 11, box.X + 12, box.Y + 5);
+                }
+            }
+            else Theme.DrawRound(g, box, 4, Color.Transparent, Color.FromArgb(57, 65, 79));
+
+            int tx = ico.Right + 10, tw = box.Left - tx - 8;
+            TextRenderer.DrawText(g, FlavorName(f != null ? f.Name : ""), Theme.BodyBold,
+                new Rectangle(tx, card.Y + 9, tw, 18),
+                usable ? (sel ? Color.White : Theme.Text) : Theme.TextOff,
                 TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
 
             string sub = f != null ? (usable ? "애드온 " + f.AddOnCount + "개" : "비어 있음") : "";
             TextRenderer.DrawText(g, sub, Theme.Small,
-                new Rectangle(b.X + 56, b.Y + 27, b.Width - 64, 16),
-                sel ? Theme.GoldDim : Theme.TextMuted,
+                new Rectangle(tx, card.Y + 26, tw, 16),
+                usable ? Theme.TextMuted : Color.FromArgb(69, 76, 88),
                 TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+
+            g.SmoothingMode = SmoothingMode.Default;
         }
 
-        /// <summary>_retail_ 같은 폴더 이름을 사람이 읽기 쉬운 이름으로</summary>
-        public static string FriendlyName(string flavor)
+        public static string FlavorName(string flavor)
         {
             switch (flavor)
             {
@@ -604,93 +409,147 @@ namespace WowAddonManager
                 default: return flavor;
             }
         }
+
+        static string FriendlyInitial(string flavor)
+        {
+            switch (flavor)
+            {
+                case "_retail_": return "W";
+                case "_forever_": return "F";
+                case "_anniversary_": return "A";
+                case "_ptr_":
+                case "_classic_ptr_": return "T";
+                case "_beta_": return "B";
+                default: return "C";
+            }
+        }
     }
 
-    /// <summary>입력란 — 움푹 들어간 홈</summary>
-    public class WowField : Panel
+    /// <summary>둥근 입력란</summary>
+    public class Field : Panel
     {
         public TextBox Box = new TextBox();
 
-        public WowField()
+        public Field()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
                      ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            Height = 28;
-            BackColor = Theme.Inset;
+            Height = 32;
+            BackColor = Theme.Panel;
 
             Box.BorderStyle = BorderStyle.None;
-            Box.BackColor = Theme.Inset;
-            Box.ForeColor = Theme.Text;
+            Box.BackColor = Theme.Field;
+            Box.ForeColor = Theme.TextSoft;
             Box.Font = Theme.Body;
-            Box.Location = new Point(8, 6);
+            Box.Location = new Point(11, 8);
             Box.GotFocus += delegate { Invalidate(); };
             Box.LostFocus += delegate { Invalidate(); };
             Controls.Add(Box);
-            Resize += delegate { Box.Width = Math.Max(20, Width - 16); };
+            Resize += delegate { Box.Width = Math.Max(20, Width - 22); };
         }
 
-        public string Value
-        {
-            get { return Box.Text; }
-            set { Box.Text = value; }
-        }
+        public string Value { get { return Box.Text; } set { Box.Text = value; } }
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            Theme.DrawInset(e.Graphics, new Rectangle(0, 0, Width - 1, Height - 1), Box.Focused);
+            e.Graphics.Clear(BackColor);
+            Theme.DrawRound(e.Graphics, new Rectangle(0, 0, Width, Height), 6,
+                Theme.Field, Box.Focused ? Theme.AccentLine : Theme.FieldLine);
             base.OnPaint(e);
         }
     }
 
-    /// <summary>금색 글자 링크</summary>
-    public class GoldLink : Label
+    public class Check : CheckBox
     {
-        public GoldLink()
+        bool hover;
+
+        public Check()
         {
-            AutoSize = true;
-            Font = Theme.Small;
-            ForeColor = Theme.GoldDim;
-            BackColor = Color.Transparent;
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            Font = Theme.Body;
+            ForeColor = Theme.Text;
+            BackColor = Theme.Panel;
             Cursor = Cursors.Hand;
+            AutoSize = false;
+            Height = 24;
         }
 
-        protected override void OnMouseEnter(EventArgs e)
-        {
-            ForeColor = Theme.GoldBright;
-            Font = new Font(Font, FontStyle.Underline);
-            base.OnMouseEnter(e);
-        }
+        protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
 
-        protected override void OnMouseLeave(EventArgs e)
+        protected override void OnPaint(PaintEventArgs e)
         {
-            ForeColor = Theme.GoldDim;
-            Font = new Font(Font, FontStyle.Regular);
-            base.OnMouseLeave(e);
+            Graphics g = e.Graphics;
+            g.Clear(BackColor);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle box = new Rectangle(0, (Height - 16) / 2, 16, 16);
+
+            if (Checked)
+            {
+                Theme.DrawRound(g, box, 4, Enabled ? Theme.Accent : Color.FromArgb(44, 52, 63),
+                                Enabled ? Theme.Accent : Color.FromArgb(44, 52, 63));
+                using (Pen p = new Pen(Enabled ? Color.White : Theme.TextOff, 1.8f))
+                {
+                    g.DrawLine(p, box.X + 4, box.Y + 8, box.X + 7, box.Y + 11);
+                    g.DrawLine(p, box.X + 7, box.Y + 11, box.X + 12, box.Y + 5);
+                }
+            }
+            else
+                Theme.DrawRound(g, box, 4, Color.Transparent,
+                    hover && Enabled ? Color.FromArgb(78, 88, 104) : Color.FromArgb(57, 65, 79));
+
+            g.SmoothingMode = SmoothingMode.Default;
+            Color c = !Enabled ? Theme.TextOff : ForeColor;
+            TextRenderer.DrawText(g, Text, Font, new Rectangle(25, 0, Width - 25, Height), c,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         }
     }
 
-    /// <summary>내용 영역 안의 제목 (금색 세리프 + 밑줄)</summary>
-    public class WowHeading : Control
+    /// <summary>가는 진행 막대</summary>
+    public class Bar : Control
     {
-        public string Caption = "";
+        int val;
+        public int Value
+        {
+            get { return val; }
+            set { val = Math.Max(0, Math.Min(100, value)); Invalidate(); }
+        }
 
-        public WowHeading()
+        public Bar()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
-                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw |
-                     ControlStyles.SupportsTransparentBackColor, true);
-            BackColor = Color.Transparent;
-            Height = 28;
+                     ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            Height = 4;
+            BackColor = Theme.TitleBar;
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
-            TextRenderer.DrawText(g, Caption, Theme.HeadFont,
-                new Rectangle(0, 0, Width, Height - 6), Theme.Gold,
-                TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-            using (Pen p = new Pen(Color.FromArgb(70, 64, 46)))
-                g.DrawLine(p, 0, Height - 3, Width, Height - 3);
+            g.Clear(BackColor);
+            Theme.FillRound(g, new Rectangle(0, 0, Width, Height), 2, Color.FromArgb(27, 31, 38));
+            if (val > 0)
+            {
+                int w = Math.Max(3, (int)(Width * (val / 100.0)));
+                Theme.FillRound(g, new Rectangle(0, 0, w, Height), 2, Theme.Accent);
+            }
         }
+    }
+
+    /// <summary>글자 링크</summary>
+    public class LinkText : Label
+    {
+        public LinkText()
+        {
+            AutoSize = true;
+            Font = Theme.Small;
+            ForeColor = Theme.TextMuted;
+            BackColor = Color.Transparent;
+            Cursor = Cursors.Hand;
+        }
+
+        protected override void OnMouseEnter(EventArgs e) { ForeColor = Theme.TextSoft; base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { ForeColor = Theme.TextMuted; base.OnMouseLeave(e); }
     }
 }

@@ -24,25 +24,22 @@ function New-IconBitmap {
     $path.AddArc(($rect.Right - $d), ($rect.Bottom - $d), $d, $d, 0, 90)
     $path.AddArc($rect.X, ($rect.Bottom - $d), $d, $d, 90, 90)
     $path.CloseFigure()
-    # 어두운 가죽 바탕 + 금색 테두리 (와우 UI 톤)
+    # 파란 바탕 (배틀넷 런처 톤)
     $bgRect = New-Object System.Drawing.Rectangle(0, 0, $S, $S)
     $bg = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         $bgRect,
-        [System.Drawing.Color]::FromArgb(255, 58, 44, 26),
-        [System.Drawing.Color]::FromArgb(255, 26, 20, 13), 90)
+        [System.Drawing.Color]::FromArgb(255, 45, 150, 240),
+        [System.Drawing.Color]::FromArgb(255, 11, 79, 148), 90)
     $g.FillPath($bg, $path)
-    $goldPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(255, 168, 139, 74)), ([float](1.5 * $u))
-    $g.DrawPath($goldPen, $path)
 
     # 상자 (애드온 꾸러미)
-    $gold = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 240, 198, 94))
+    $white = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
     $boxX = 7 * $u; $boxY = 15 * $u; $boxW = 18 * $u; $boxH = 11 * $u
-    $g.FillRectangle($gold, $boxX, $boxY, $boxW, $boxH)
+    $g.FillRectangle($white, $boxX, $boxY, $boxW, $boxH)
 
     # 상자 뚜껑 띠
-    $band = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 36, 28, 17))
+    $band = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 20, 92, 165))
     $g.FillRectangle($band, ($boxX + 7.5 * $u), $boxY, (3 * $u), $boxH)
-    $white = $gold
 
     # 위로 향하는 화살표 (옮긴다는 뜻)
     $pts = @(

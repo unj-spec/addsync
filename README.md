@@ -94,7 +94,7 @@ tools\build-installer.cmd
 ### 구성
 
 ```
-src\            C# 소스 (WowCore 핵심 로직 / Theme 와우풍 UI / MainForm 화면 / Updater 자동 업데이트)
+src\            C# 소스 (WowCore 핵심 로직 / Theme 화면 요소 / MainForm 화면 / Updater 자동 업데이트)
 tools\          아이콘 생성, 설치 파일 빌드
 scripts\        같은 기능의 PowerShell 버전 (자동화·예약 실행용)
 installer.iss   Inno Setup 설치 스크립트

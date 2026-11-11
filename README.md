@@ -7,13 +7,38 @@
 
 ## 받기
 
-[Releases](https://github.com/unj-spec/wow-addon-manager/releases) 에서 `WowAddonManager-Setup-x.x.x.exe` 를 받아 설치하세요.
+[Releases](https://github.com/unj-spec/wow-addon-manager/releases) 에서 받으세요.
 
-- 윈도우 10/11
-- 따로 설치할 것 없습니다 (.NET Framework 4.x 는 윈도우에 기본 포함)
+| 파일 | 쓰임 |
+|---|---|
+| `WowAddonManager-Setup-x.x.x.exe` | 내 PC에 설치해서 계속 쓸 때 |
+| `WowAddonManager-portable.exe` | **PC방·남의 PC** — 설치 없이 바로 실행 |
+
+- 윈도우 10/11, 따로 설치할 것 없음 (.NET Framework 4.x 는 윈도우에 기본 포함)
 - 새 버전이 나오면 프로그램이 알려주고, 버튼 하나로 업데이트됩니다
 
 ---
+
+## 어디서든 쓰는 법
+
+집에서 한 번 올려 두면, 다른 PC에서는 **프로그램 받기 → 구글 로그인 → 버튼 하나**입니다.
+
+**집에서 (한 번)**
+
+1. 프로그램 실행 → **클라우드** 탭 → 구글 로그인
+2. **이 PC 상태를 올리기**
+
+**밖에서 (매번)**
+
+1. `WowAddonManager-portable.exe` 를 받아 실행 (설치 안 해도 됩니다)
+2. **클라우드** 탭 → 구글 로그인
+3. **드라이브에서 받아 설치**
+
+그 PC의 와우를 알아서 찾고, 설치된 게임 버전에 맞춰 애드온과 개인 설정을 넣습니다.
+설치 전에 무엇이 바뀌는지 먼저 보여주고, 원래 상태는 백업해 둡니다.
+
+> **쓰고 나서 원래대로**: 남의 PC였다면 **백업** 탭에서 되돌리기를 누르세요.
+> 설치 직전 상태로 복구됩니다.
 
 ## 쓰는 법
 

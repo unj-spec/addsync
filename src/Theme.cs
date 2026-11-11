@@ -314,6 +314,27 @@ namespace WowAddonManager
 
         public void ClearItems() { Items.Clear(); checkedSet.Clear(); }
 
+        /// <summary>주어진 폴더 이름들만 고른 상태로 만든다. 고른 개수를 돌려준다.</summary>
+        public int CheckOnly(List<string> names)
+        {
+            checkedSet.Clear();
+            int n = 0;
+            for (int i = 0; i < Items.Count; i++)
+            {
+                Flavor f = Items[i] as Flavor;
+                if (f == null) continue;
+                foreach (string name in names)
+                    if (string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        checkedSet.Add(i);
+                        n++;
+                        break;
+                    }
+            }
+            Invalidate();
+            return n;
+        }
+
         public List<Flavor> CheckedFlavors()
         {
             List<Flavor> list = new List<Flavor>();

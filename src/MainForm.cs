@@ -45,7 +45,7 @@ namespace WowAddonManager
         List<BackupInfo> backups = new List<BackupInfo>();
         Panel pnlCloud;
         Label lblCloudState, lblCloudDesc, lblCloudNote;
-        FlatBtn btnSignIn, btnSignOut, btnUpload, btnDownload;
+        FlatBtn btnSignIn, btnSignOut, btnUpload, btnDownload, btnCloudSetup;
         Check chkAutoUpload;
         bool pendingAutoUpload;
         SummaryCard cardExport, cardInstall;
@@ -74,6 +74,8 @@ namespace WowAddonManager
         public MainForm()
         {
             settings.Load();
+            AppInfo.RuntimeGoogleClientId = settings.Get("googleClientId", "");
+            AppInfo.RuntimeGoogleClientSecret = settings.Get("googleClientSecret", "");
 
             Text = AppInfo.Name;
             Font = Theme.Body;
@@ -856,8 +858,8 @@ namespace WowAddonManager
             Title("구글 드라이브", pnlCloud);
 
             lblCloudDesc = new Label();
-            lblCloudDesc.Text = "내보낸 꾸러미를 구글 드라이브에 올려 두면, 다른 PC에서 받아 바로 설치할 수 있습니다.\n"
-                              + "드라이브 앱을 깔 수 없는 PC에서도 됩니다. 바뀐 파일만 주고받습니다.";
+            lblCloudDesc.Text = "집에서 한 번 올려 두면, 어디서든 이 프로그램을 받아 구글 로그인만 하면 됩니다.\n"
+                              + "그 PC의 와우를 찾아 애드온과 개인 설정을 그대로 넣어 줍니다.";
             lblCloudDesc.AutoSize = false;
             lblCloudDesc.Location = new Point(0, 30);
             lblCloudDesc.Size = new Size(620, 42);
@@ -893,22 +895,31 @@ namespace WowAddonManager
             };
             pnlCloud.Controls.Add(btnSignOut);
 
-            btnUpload = new FlatBtn();
-            btnUpload.Text = "드라이브에 올리기";
-            btnUpload.Size = new Size(156, 36);
-            btnUpload.Location = new Point(0, 176);
-            btnUpload.Click += delegate { CloudUpload(); };
-            pnlCloud.Controls.Add(btnUpload);
-
             btnDownload = new FlatBtn();
-            btnDownload.Text = "드라이브에서 받기";
-            btnDownload.Size = new Size(156, 36);
-            btnDownload.Location = new Point(164, 176);
-            btnDownload.Click += delegate { CloudDownload(); };
+            btnDownload.Text = "드라이브에서 받아 설치";
+            btnDownload.Kind = BtnKind.Primary;
+            btnDownload.Font = Theme.H2;
+            btnDownload.Size = new Size(210, 42);
+            btnDownload.Location = new Point(0, 172);
+            btnDownload.Click += delegate { CloudPullAndInstall(); };
             pnlCloud.Controls.Add(btnDownload);
 
+            btnUpload = new FlatBtn();
+            btnUpload.Text = "이 PC 상태를 올리기";
+            btnUpload.Size = new Size(176, 42);
+            btnUpload.Location = new Point(220, 172);
+            btnUpload.Click += delegate { CloudExportAndUpload(); };
+            pnlCloud.Controls.Add(btnUpload);
+
+            btnCloudSetup = new FlatBtn();
+            btnCloudSetup.Text = "구글 연동 설정";
+            btnCloudSetup.Size = new Size(134, 34);
+            btnCloudSetup.Location = new Point(0, 118);
+            btnCloudSetup.Click += delegate { CloudSetup(); };
+            pnlCloud.Controls.Add(btnCloudSetup);
+
             chkAutoUpload = MakeCheck("내보내기가 끝나면 드라이브에 자동으로 올리기",
-                new Point(0, 226), settings.GetBool("autoUpload", false));
+                new Point(0, 230), settings.GetBool("autoUpload", false));
             pnlCloud.Controls.Add(chkAutoUpload);
 
             lblCloudNote = new Label();
@@ -934,19 +945,25 @@ namespace WowAddonManager
 
             if (!GoogleDrive.IsConfigured)
             {
-                lblCloudState.Text = "구글 연동이 아직 설정되지 않았습니다";
+                lblCloudState.Text = "한 번만 설정하면 됩니다";
                 lblCloudState.ForeColor = Theme.TextMuted;
-                btnSignIn.Enabled = btnSignOut.Enabled = false;
+                btnSignIn.Visible = btnSignOut.Visible = false;
+                btnCloudSetup.Visible = true;
                 btnUpload.Enabled = btnDownload.Enabled = chkAutoUpload.Enabled = false;
                 lblCloudNote.Text =
-                    "이 기능을 쓰려면 구글 클라우드 콘솔에서 만든 OAuth 클라이언트 ID 가 필요합니다.\n"
-                  + "자세한 방법은 README 의 '구글 드라이브 연동' 항목을 보세요.";
+                    "구글이 '어느 프로그램이 요청하는지' 알아야 하기 때문에 OAuth 클라이언트가 필요합니다.\n"
+                  + "'구글 연동 설정' 을 누르면 만드는 방법을 단계별로 알려 드립니다. 5분이면 끝납니다.\n"
+                  + "로그인은 각자 본인 구글 계정으로 하고, 파일도 각자 본인 드라이브에 저장됩니다.";
                 return;
             }
 
             bool on = GoogleDrive.IsSignedIn;
-            lblCloudState.Text = on ? "연결됨" : "연결되지 않음";
+            lblCloudState.Text = on ? "내 구글 드라이브에 연결됨" : "연결되지 않음";
             lblCloudState.ForeColor = on ? Theme.Ok : Theme.TextMuted;
+            btnCloudSetup.Visible = AppInfo.BuiltInGoogleClientId.Length == 0;
+            btnCloudSetup.Location = new Point(on ? 236 : 236, 118);
+            btnSignIn.Visible = true;
+            btnSignOut.Visible = true;
             btnSignIn.Enabled = !on;
             btnSignOut.Enabled = on;
             btnUpload.Enabled = on;
@@ -954,12 +971,35 @@ namespace WowAddonManager
             chkAutoUpload.Enabled = on;
 
             lblCloudNote.Text =
-                "• 드라이브의 '" + GoogleDrive.FolderName + "' 폴더에 올라갑니다.\n"
+                "• 각자 본인 구글 계정으로 로그인하고, 파일은 본인 드라이브에 저장됩니다.\n"
+              + "• 드라이브의 '" + GoogleDrive.FolderName + "' 폴더에 올라갑니다.\n"
               + "• 이 프로그램이 만든 파일만 접근합니다 (drive.file 권한). 다른 파일은 보지 않습니다.\n"
               + "• 올리기는 '내보내기' 탭의 저장 위치를, 받기는 '설치' 탭의 가져올 폴더를 씁니다.";
         }
 
-        void CloudSignIn()
+        void CloudSetup()
+        {
+            using (GoogleSetupForm dlg = new GoogleSetupForm(
+                       AppInfo.RuntimeGoogleClientId, AppInfo.RuntimeGoogleClientSecret))
+            {
+                try { dlg.Icon = Icon; }
+                catch { }
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+                AppInfo.RuntimeGoogleClientId = dlg.ClientId;
+                AppInfo.RuntimeGoogleClientSecret = dlg.ClientSecret;
+                settings.Set("googleClientId", dlg.ClientId);
+                settings.Set("googleClientSecret", dlg.ClientSecret);
+                settings.Save();
+                GoogleDrive.SignOut();
+                Status("구글 연동 설정을 저장했습니다. 이제 로그인하세요.");
+                RefreshCloud();
+            }
+        }
+
+        void CloudSignIn() { CloudSignIn(null); }
+
+        void CloudSignIn(Action next)
         {
             btnSignIn.Enabled = false;
             Status("구글 로그인 중…");
@@ -984,13 +1024,84 @@ namespace WowAddonManager
                         RefreshCloud();
                         if (error != null) { Status("로그인 실패"); Info("로그인하지 못했습니다.\n\n" + error); }
                         else if (!ok) { Status("로그인 취소됨"); }
-                        else { Status("구글 드라이브에 연결되었습니다."); }
+                        else
+                        {
+                            Status("구글 드라이브에 연결되었습니다.");
+                            if (next != null) next();
+                        }
                     });
                 }
                 catch { }
             });
             t.IsBackground = true;
             t.Start();
+        }
+
+        /// <summary>로그인 → 드라이브에서 받기 → 이 PC 와우에 설치, 한 번에</summary>
+        void CloudPullAndInstall()
+        {
+            if (!GoogleDrive.IsConfigured) { CloudSetup(); return; }
+            if (!CheckWow()) return;
+
+            if (!GoogleDrive.IsSignedIn)
+            {
+                CloudSignIn(delegate { CloudPullAndInstall(); });
+                return;
+            }
+
+            string cache = AppInfo.CloudCacheDir;
+            Log("");
+            Log("드라이브에서 받기 → " + cache);
+            Status("드라이브에서 받는 중…");
+
+            Run(delegate (Reporter rep) { GoogleDrive.DownloadFolder(cache, rep); },
+                null, false, delegate
+                {
+                    fldSourceDir.Value = cache;
+                    ShowManifest();
+
+                    Manifest mi;
+                    try { mi = Sync.ReadManifest(cache); }
+                    catch (Exception ex) { Info(ex.Message); return; }
+
+                    // 이 PC 에도 있는 버전만 고른다
+                    List<string> names = new List<string>();
+                    foreach (Flavor f in WowCore.GetFlavors(fldWow.Value))
+                        if (mi.Flavors.ContainsKey(f.Name)) names.Add(f.Name);
+
+                    if (names.Count == 0)
+                    {
+                        List<string> have = new List<string>();
+                        foreach (string k in mi.Flavors.Keys) have.Add(VersionNames.Friendly(k));
+                        Info("드라이브의 꾸러미에 든 버전(" + string.Join(", ", have.ToArray())
+                             + ")이 이 PC에는 없습니다.");
+                        return;
+                    }
+
+                    lstFlavors.CheckOnly(names);
+                    UpdateHints();
+                    SetTab(1);
+                    StartInstall();
+                });
+        }
+
+        /// <summary>이 PC 상태를 내보낸 뒤 드라이브에 올리기, 한 번에</summary>
+        void CloudExportAndUpload()
+        {
+            if (!GoogleDrive.IsConfigured) { CloudSetup(); return; }
+            if (!GoogleDrive.IsSignedIn)
+            {
+                CloudSignIn(delegate { CloudExportAndUpload(); });
+                return;
+            }
+            if (CheckedFlavors().Count == 0)
+            {
+                Info("왼쪽에서 올릴 게임 버전을 하나 이상 선택하세요.");
+                return;
+            }
+            pendingAutoUpload = true;
+            SetTab(0);
+            StartExport();
         }
 
         void CloudUpload()
@@ -1594,6 +1705,12 @@ namespace WowAddonManager
 
         void Run(Job job, string doneMessage, bool showOpenFolder)
         {
+            Run(job, doneMessage, showOpenFolder, null);
+        }
+
+        /// <param name="next">성공했을 때 이어서 할 일 (완료 창 대신)</param>
+        void Run(Job job, string doneMessage, bool showOpenFolder, Action next)
+        {
             if (worker != null && worker.IsAlive) { Info("이미 작업이 진행 중입니다."); return; }
             SaveSettings();
             SetBusy(true);
@@ -1644,7 +1761,10 @@ namespace WowAddonManager
                                 CloudUpload();
                                 return;
                             }
-                            MessageBox.Show(this, doneMessage, "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            if (next != null) { next(); return; }
+                            if (doneMessage != null)
+                                MessageBox.Show(this, doneMessage, "완료",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Information);
                         }
                     });
                 }

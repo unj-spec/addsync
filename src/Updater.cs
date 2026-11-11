@@ -64,7 +64,11 @@ namespace WowAddonManager
                 foreach (Match m in Regex.Matches(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\""))
                 {
                     string url = m.Groups[1].Value;
-                    if (url.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) { r.InstallerUrl = url; break; }
+                    if (!url.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
+                    // 설치 파일을 먼저 고른다 (포터블 exe 도 같이 올라가므로)
+                    if (url.IndexOf("setup", StringComparison.OrdinalIgnoreCase) >= 0)
+                    { r.InstallerUrl = url; break; }
+                    if (r.InstallerUrl.Length == 0) r.InstallerUrl = url;
                 }
                 return r;
             }

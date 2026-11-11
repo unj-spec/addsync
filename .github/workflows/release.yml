@@ -32,6 +32,10 @@ jobs:
         shell: cmd
         run: '"%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /Q installer.iss'
 
+      - name: 포터블 exe 함께 올리기
+        shell: pwsh
+        run: Copy-Item WowAddonManager.exe dist\WowAddonManager-portable.exe
+
       - name: 산출물 보관
         uses: actions/upload-artifact@v4
         with:

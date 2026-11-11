@@ -25,8 +25,32 @@ namespace WowAddonManager
         // 구글 클라우드 콘솔 → 사용자 인증 정보 → OAuth 클라이언트 ID(데스크톱 앱)
         // 에서 받은 값을 여기에 넣으면 클라우드 탭이 켜진다.
         // 데스크톱 앱의 보안 비밀번호는 구글 설계상 공개되는 값이다(PKCE 로 보호한다).
-        public const string GoogleClientId = "";
-        public const string GoogleClientSecret = "";
+        // 빌드할 때 넣어 두면 사용자가 따로 설정할 필요가 없다. 비워 두면
+        // 프로그램 안 '구글 연동 설정' 창에서 각자 입력할 수 있다.
+        public const string BuiltInGoogleClientId = "";
+        public const string BuiltInGoogleClientSecret = "";
+
+        // 프로그램이 뜰 때 설정 파일에서 채워 넣는다
+        public static string RuntimeGoogleClientId = "";
+        public static string RuntimeGoogleClientSecret = "";
+
+        public static string GoogleClientId
+        {
+            get
+            {
+                return RuntimeGoogleClientId.Length > 0
+                    ? RuntimeGoogleClientId : BuiltInGoogleClientId;
+            }
+        }
+
+        public static string GoogleClientSecret
+        {
+            get
+            {
+                return RuntimeGoogleClientSecret.Length > 0
+                    ? RuntimeGoogleClientSecret : BuiltInGoogleClientSecret;
+            }
+        }
 
         public const string RepoName = "wow-addon-manager";
 
@@ -61,6 +85,20 @@ namespace WowAddonManager
                 return Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                     @"WowAddonManager\backup");
+            }
+        }
+
+        /// <summary>드라이브에서 받은 꾸러미를 두는 곳 (사용자 눈에 띌 필요 없다)</summary>
+        public static string CloudCacheDir
+        {
+            get
+            {
+                string d = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    @"WowAddonManager\cloud");
+                try { Directory.CreateDirectory(d); }
+                catch { }
+                return d;
             }
         }
 

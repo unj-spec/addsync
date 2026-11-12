@@ -18,7 +18,7 @@ set REFS=/reference:System.dll /reference:System.Core.dll /reference:System.Secu
 "%CSC%" /nologo /target:winexe /platform:anycpu /optimize+ /utf8output ^
   /win32icon:"%~dp0src\app.ico" /resource:"%~dp0src\app.ico",app.ico ^
   /out:"%~dp0WowAddonManager.exe" %REFS% ^
-  "%~dp0src\AppInfo.cs" "%~dp0src\Json.cs" "%~dp0src\WowCore.cs" "%~dp0src\Sync.cs" "%~dp0src\GoogleDrive.cs" "%~dp0src\Updater.cs" "%~dp0src\Theme.cs" "%~dp0src\PreviewForm.cs" "%~dp0src\GoogleSetupForm.cs" "%~dp0src\MainForm.cs"
+  "%~dp0src\AppInfo.cs" "%~dp0src\Json.cs" "%~dp0src\WowCore.cs" "%~dp0src\Sync.cs" "%~dp0src\GoogleDrive.cs" "%~dp0src\Updater.cs" "%~dp0src\Theme.cs" "%~dp0src\MsgForm.cs" "%~dp0src\PreviewForm.cs" "%~dp0src\GoogleSetupForm.cs" "%~dp0src\MainForm.cs"
 
 if errorlevel 1 (
   echo.

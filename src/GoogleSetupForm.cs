@@ -97,8 +97,7 @@ namespace WowAddonManager
             {
                 if (ClientId.Length == 0)
                 {
-                    MessageBox.Show(this, "클라이언트 ID 를 입력하세요.", AppInfo.Name,
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    Msg.Info(this, AppInfo.Name, "클라이언트 ID 를 입력하세요.");
                     return;
                 }
                 DialogResult = DialogResult.OK;
@@ -154,10 +153,11 @@ namespace WowAddonManager
                     string secret = Json.Str(node, "client_secret", "");
                     if (id.Length == 0)
                     {
-                        MessageBox.Show(this,
+                        Msg.Show(this, AppInfo.Name,
                             "그 파일에서 클라이언트 ID 를 찾지 못했습니다.\n\n" +
                             "구글 콘솔에서 'JSON 다운로드' 로 받은 파일을 고르세요.",
-                            AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            MsgKind.Warning,
+                            new string[] { "확인" }, new DialogResult[] { DialogResult.OK });
                         return;
                     }
 
@@ -166,8 +166,9 @@ namespace WowAddonManager
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, "파일을 읽지 못했습니다.\n\n" + ex.Message,
-                        AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    Msg.Show(this, AppInfo.Name, "파일을 읽지 못했습니다.\n\n" + ex.Message,
+                        MsgKind.Danger,
+                        new string[] { "확인" }, new DialogResult[] { DialogResult.OK });
                 }
             }
         }

@@ -34,7 +34,7 @@ namespace WowAddonManager
         Field fldExportDir, fldSourceDir;
         FlatBtn btnExportDir, btnSourceDir, btnPrimary, btnOpenFolder;
         Check chkExpSettings, chkExpGraphics, chkDeep;
-        Check chkInsSettings, chkInsClean, chkInsBackup, chkMapAccount;
+        Check chkInsSettings, chkInsClean, chkInsBackup, chkMapAccount, chkCloudClean;
         string srcAccountId = "", dstAccountId = "";
         DarkListView lvAddons;
         Panel pnlBackup;
@@ -62,7 +62,7 @@ namespace WowAddonManager
         bool busy;
 
         // 상태
-        Label lblStatus;
+        Label lblStatus, lblMade;
         Bar bar;
         DarkTextBox txtLog;
 
@@ -707,6 +707,11 @@ namespace WowAddonManager
             chkInsClean = MakeCheck("기존 애드온을 모두 지우고 설치 (완전히 동일하게)",
                 new Point(0, 226), settings.GetBool("insClean", false));
             chkInsClean.ForeColor = Theme.Danger;
+            chkInsClean.CheckedChanged += delegate
+            {
+                if (chkCloudClean != null && chkCloudClean.Checked != chkInsClean.Checked)
+                    chkCloudClean.Checked = chkInsClean.Checked;
+            };
             pnlInstall.Controls.Add(chkInsClean);
 
             chkMapAccount = MakeCheck("계정 폴더 번호 맞추기", new Point(0, 254), false);
@@ -865,7 +870,7 @@ namespace WowAddonManager
 
             lblCloudState = new Label();
             lblCloudState.AutoSize = false;
-            lblCloudState.Location = new Point(0, 86);
+            lblCloudState.Location = new Point(0, 80);
             lblCloudState.Size = new Size(400, 22);
             lblCloudState.Font = Theme.BodyBold;
             lblCloudState.BackColor = Theme.Panel;
@@ -875,14 +880,14 @@ namespace WowAddonManager
             btnSignIn.Text = "구글 로그인";
             btnSignIn.Kind = BtnKind.Primary;
             btnSignIn.Size = new Size(126, 34);
-            btnSignIn.Location = new Point(0, 118);
+            btnSignIn.Location = new Point(0, 108);
             btnSignIn.Click += delegate { CloudSignIn(); };
             pnlCloud.Controls.Add(btnSignIn);
 
             btnSignOut = new FlatBtn();
             btnSignOut.Text = "로그아웃";
             btnSignOut.Size = new Size(96, 34);
-            btnSignOut.Location = new Point(134, 118);
+            btnSignOut.Location = new Point(134, 108);
             btnSignOut.Click += delegate
             {
                 GoogleDrive.SignOut();
@@ -896,13 +901,13 @@ namespace WowAddonManager
             btnSync.Kind = BtnKind.Primary;
             btnSync.Font = Theme.H2;
             btnSync.Size = new Size(176, 44);
-            btnSync.Location = new Point(0, 168);
+            btnSync.Location = new Point(0, 154);
             btnSync.Click += delegate { CloudSync(); };
             pnlCloud.Controls.Add(btnSync);
 
             lblSyncState = new Label();
             lblSyncState.AutoSize = false;
-            lblSyncState.Location = new Point(188, 168);
+            lblSyncState.Location = new Point(188, 154);
             lblSyncState.Size = new Size(420, 44);
             lblSyncState.Font = Theme.Small;
             lblSyncState.ForeColor = Theme.TextMuted;
@@ -913,26 +918,26 @@ namespace WowAddonManager
             btnDownload = new FlatBtn();
             btnDownload.Text = "받아서 설치";
             btnDownload.Size = new Size(126, 32);
-            btnDownload.Location = new Point(0, 222);
+            btnDownload.Location = new Point(0, 208);
             btnDownload.Click += delegate { CloudPullAndInstall(); };
             pnlCloud.Controls.Add(btnDownload);
 
             btnUpload = new FlatBtn();
             btnUpload.Text = "올리기";
             btnUpload.Size = new Size(104, 32);
-            btnUpload.Location = new Point(134, 222);
+            btnUpload.Location = new Point(134, 208);
             btnUpload.Click += delegate { CloudExportAndUpload(); };
             pnlCloud.Controls.Add(btnUpload);
 
             btnCloudSetup = new FlatBtn();
             btnCloudSetup.Text = "구글 연동 설정";
             btnCloudSetup.Size = new Size(134, 34);
-            btnCloudSetup.Location = new Point(0, 118);
+            btnCloudSetup.Location = new Point(0, 108);
             btnCloudSetup.Click += delegate { CloudSetup(); };
             pnlCloud.Controls.Add(btnCloudSetup);
 
             chkKeepSignIn = MakeCheck("이 PC에 로그인 유지 — 다음에 켤 때 바로 연결됩니다",
-                new Point(0, 266), settings.GetBool("keepSignIn", false));
+                new Point(0, 250), settings.GetBool("keepSignIn", false));
             chkKeepSignIn.CheckedChanged += delegate
             {
                 GoogleDrive.Persist = chkKeepSignIn.Checked;
@@ -943,13 +948,25 @@ namespace WowAddonManager
             pnlCloud.Controls.Add(chkKeepSignIn);
 
             chkAutoUpload = MakeCheck("내보내기가 끝나면 드라이브에 자동으로 올리기",
-                new Point(0, 294), settings.GetBool("autoUpload", false));
+                new Point(0, 276), settings.GetBool("autoUpload", false));
             pnlCloud.Controls.Add(chkAutoUpload);
+
+            // 받아서 설치할 때 쓸 설정. '설치' 쪽 같은 항목과 늘 같은 값을 본다.
+            chkCloudClean = MakeCheck("받을 때 기존 애드온을 모두 지우고 설치 (완전히 동일하게)",
+                new Point(0, 302), settings.GetBool("insClean", false));
+            chkCloudClean.ForeColor = Theme.Danger;
+            chkCloudClean.CheckedChanged += delegate
+            {
+                if (chkInsClean != null && chkInsClean.Checked != chkCloudClean.Checked)
+                    chkInsClean.Checked = chkCloudClean.Checked;
+                RefreshCloud();
+            };
+            pnlCloud.Controls.Add(chkCloudClean);
 
             lblCloudNote = new Label();
             lblCloudNote.AutoSize = false;
-            lblCloudNote.Location = new Point(0, 328);
-            lblCloudNote.Size = new Size(620, 70);
+            lblCloudNote.Location = new Point(0, 334);
+            lblCloudNote.Size = new Size(620, 76);
             lblCloudNote.Font = Theme.Small;
             lblCloudNote.ForeColor = Theme.TextMuted;
             lblCloudNote.BackColor = Theme.Panel;
@@ -960,6 +977,9 @@ namespace WowAddonManager
                 int w = pnlCloud.Width;
                 lblCloudDesc.Width = w;
                 lblCloudNote.Width = w;
+                // 안내 글은 늘 바닥에 붙여 둔다 (잘리지 않게)
+                lblCloudNote.Location = new Point(0,
+                    Math.Max(334, pnlCloud.Height - lblCloudNote.Height));
             };
         }
 
@@ -976,6 +996,7 @@ namespace WowAddonManager
                 btnSync.Enabled = false;
                 lblSyncState.Text = "";
                 btnUpload.Enabled = btnDownload.Enabled = chkAutoUpload.Enabled = false;
+                chkCloudClean.Enabled = false;
                 lblCloudNote.Text =
                     "구글이 '어느 프로그램이 요청하는지' 알아야 하기 때문에 OAuth 클라이언트가 필요합니다.\n"
                   + "'구글 연동 설정' 을 누르면 만드는 방법을 단계별로 알려 드립니다. 5분이면 끝납니다.\n"
@@ -987,7 +1008,7 @@ namespace WowAddonManager
             lblCloudState.Text = on ? "내 구글 드라이브에 연결됨" : "연결되지 않음";
             lblCloudState.ForeColor = on ? Theme.Ok : Theme.TextMuted;
             btnCloudSetup.Visible = AppInfo.BuiltInGoogleClientId.Length == 0;
-            btnCloudSetup.Location = new Point(on ? 236 : 236, 118);
+            btnCloudSetup.Location = new Point(236, 108);
             btnSignIn.Visible = true;
             btnSignOut.Visible = true;
             btnSignIn.Enabled = !on;
@@ -996,6 +1017,7 @@ namespace WowAddonManager
             btnDownload.Enabled = on;
             btnSync.Enabled = on;
             chkAutoUpload.Enabled = on;
+            chkCloudClean.Enabled = on;
             chkKeepSignIn.Enabled = true;
 
             string lastAt = settings.Get("syncRemoteAt", "");
@@ -1008,6 +1030,9 @@ namespace WowAddonManager
             lblCloudNote.Text =
                 "• 각자 본인 구글 계정으로 로그인하고, 파일은 본인 드라이브에 저장됩니다.\n"
               + "• 이 프로그램이 만든 파일만 접근합니다 (drive.file 권한). 다른 파일은 보지 않습니다.\n"
+              + (chkCloudClean.Checked
+                 ? "• 받을 때 이 PC에만 있던 애드온도 지웁니다. 설치 전 백업은 그대로 만들어집니다.\n"
+                 : "• 받아도 이 PC에만 있던 애드온은 그대로 둡니다.\n")
               + (chkKeepSignIn.Checked
                  ? "• 로그인 상태가 이 PC에 저장됩니다. 공용 PC라면 꺼 두세요."
                  : "• 이 PC에 아무것도 남기지 않습니다. 프로그램을 끄면 로그인과 받은 파일이 지워집니다.");
@@ -1134,13 +1159,11 @@ namespace WowAddonManager
                 foreach (Flavor f in sel) addons += f.AddOnCount;
                 if (addons == 0) { SyncDown(remote); return; }
 
-                DialogResult r = MessageBox.Show(this,
+                DialogResult r = Msg.Ask(this, "어느 쪽을 기준으로 할까요?",
                     "이 PC와 드라이브 양쪽에 애드온이 있습니다.\n\n"
-                    + "드라이브: " + remote.SourcePC + " 에서 " + Pretty(remote.ExportedAt) + "\n"
-                    + "이 PC: 애드온 " + addons + "개\n\n"
-                    + "[예] 드라이브 것을 이 PC에 설치\n"
-                    + "[아니오] 이 PC 것을 드라이브에 올리기",
-                    "어느 쪽을 기준으로 할까요?", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                    + "드라이브 — " + remote.SourcePC + " 에서 " + Pretty(remote.ExportedAt) + "\n"
+                    + "이 PC — 애드온 " + addons + "개",
+                    "드라이브 것을 받기", "이 PC 것을 올리기", "취소", MsgKind.Question);
                 if (r == DialogResult.Yes) SyncDown(remote);
                 else if (r == DialogResult.No) SyncUp();
                 return;
@@ -1148,13 +1171,11 @@ namespace WowAddonManager
 
             if (localChanged && remoteChanged)
             {
-                DialogResult r = MessageBox.Show(this,
-                    "양쪽 다 바뀌었습니다.\n\n"
-                    + "드라이브: " + remote.SourcePC + " 에서 " + Pretty(remote.ExportedAt) + "\n"
-                    + "이 PC: 마지막 동기화 뒤 애드온이나 설정이 바뀜\n\n"
-                    + "[예] 드라이브 것으로 맞추기 (이 PC 변경분은 덮어씀)\n"
-                    + "[아니오] 이 PC 것으로 맞추기 (드라이브 것을 덮어씀)",
-                    "어느 쪽을 살릴까요?", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+                DialogResult r = Msg.Ask(this, "어느 쪽을 살릴까요?",
+                    "양쪽 다 바뀌었습니다. 한쪽은 덮어쓰게 됩니다.\n\n"
+                    + "드라이브 — " + remote.SourcePC + " 에서 " + Pretty(remote.ExportedAt) + "\n"
+                    + "이 PC — 마지막 동기화 뒤 애드온이나 설정이 바뀜",
+                    "드라이브 것으로 맞추기", "이 PC 것으로 맞추기", "취소", MsgKind.Warning);
                 if (r == DialogResult.Yes) SyncDown(remote);
                 else if (r == DialogResult.No) SyncUp();
                 return;
@@ -1363,6 +1384,14 @@ namespace WowAddonManager
             bar.Location = new Point(350, 14);
             pnlStatus.Controls.Add(bar);
 
+            lblMade = new Label();
+            lblMade.Text = AppInfo.Author;
+            lblMade.AutoSize = true;
+            lblMade.Font = Theme.Small;
+            lblMade.ForeColor = Theme.TextOff;
+            lblMade.BackColor = Theme.TitleBar;
+            pnlStatus.Controls.Add(lblMade);
+
             lnkDetail = new LinkText();
             lnkDetail.Text = "자세히 ▾";
             lnkDetail.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -1386,7 +1415,8 @@ namespace WowAddonManager
             pnlStatus.Resize += delegate
             {
                 lnkDetail.Location = new Point(pnlStatus.Width - lnkDetail.Width - 18, 9);
-                bar.Width = Math.Max(60, lnkDetail.Left - 350 - 20);
+                lblMade.Location = new Point(lnkDetail.Left - lblMade.Width - 18, 9);
+                bar.Width = Math.Max(60, lblMade.Left - 350 - 20);
             };
         }
 
@@ -1692,11 +1722,11 @@ namespace WowAddonManager
             if (lvBackup.SelectedIndices.Count == 0) return;
             BackupInfo b = backups[lvBackup.SelectedIndices[0]];
 
-            if (MessageBox.Show(this,
+            if (Msg.Ask(this, "되돌릴까요?",
                     b.When.ToString("yyyy-MM-dd HH:mm") + " 상태로 되돌립니다.\n\n"
                     + "지금 애드온은 이 백업의 내용으로 완전히 교체됩니다.\n"
-                    + "와우는 완전히 종료해 두세요.\n\n계속할까요?",
-                    "되돌리기", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+                    + "와우는 완전히 종료해 두세요.",
+                    "되돌리기", "취소", null, MsgKind.Warning) != DialogResult.Yes)
                 return;
 
             BackupInfo target = b;
@@ -1713,9 +1743,9 @@ namespace WowAddonManager
         {
             if (lvBackup.SelectedIndices.Count == 0) return;
             BackupInfo b = backups[lvBackup.SelectedIndices[0]];
-            if (MessageBox.Show(this,
-                    b.When.ToString("yyyy-MM-dd HH:mm") + " 백업을 지웁니다. 되돌릴 수 없습니다.\n\n계속할까요?",
-                    "백업 삭제", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+            if (Msg.Ask(this, "백업을 지울까요?",
+                    b.When.ToString("yyyy-MM-dd HH:mm") + " 백업을 지웁니다.\n되돌릴 수 없습니다.",
+                    "지우기", "취소", null, MsgKind.Danger) != DialogResult.Yes)
                 return;
             try { WowCore.DeleteTree(b.Dir); }
             catch (Exception ex) { Info("지우지 못했습니다.\n\n" + ex.Message); }
@@ -1989,7 +2019,8 @@ namespace WowAddonManager
                             recordAfterJob = false;
                             Log("실패: " + error);
                             Status("실패했습니다.");
-                            MessageBox.Show(this, error, "작업 실패", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            Msg.Show(this, "작업 실패", error, MsgKind.Danger,
+                                new string[] { "확인" }, new DialogResult[] { DialogResult.OK });
                         }
                         else
                         {
@@ -2008,9 +2039,7 @@ namespace WowAddonManager
                             }
                             if (next != null) { next(); return; }
                             if (recordAfterJob) { recordAfterJob = false; RecordSync(); }
-                            if (doneMessage != null)
-                                MessageBox.Show(this, doneMessage, "완료",
-                                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            if (doneMessage != null) Msg.Info(this, "완료", doneMessage);
                         }
                     });
                 }
@@ -2138,10 +2167,10 @@ namespace WowAddonManager
 
             string notes = pendingUpdate.Notes.Length > 0
                 ? "\n\n바뀐 점\n" + Truncate(pendingUpdate.Notes, 500) : "";
-            if (MessageBox.Show(this,
+            if (Msg.Ask(this, "업데이트할까요?",
                     "v" + pendingUpdate.Version + " 로 업데이트합니다." + notes +
-                    "\n\n설치 파일을 받아 실행합니다. 프로그램은 자동으로 닫힙니다.\n계속할까요?",
-                    "업데이트", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK)
+                    "\n\n설치 파일을 받아 실행합니다. 프로그램은 자동으로 닫힙니다.",
+                    "업데이트", "나중에", null, MsgKind.Info) != DialogResult.Yes)
                 return;
 
             btnUpdateNow.Enabled = false;
@@ -2207,7 +2236,7 @@ namespace WowAddonManager
 
         void Info(string msg)
         {
-            MessageBox.Show(this, msg, AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Msg.Info(this, AppInfo.Name, msg);
         }
 
         void Status(string msg) { lblStatus.Text = msg; }
@@ -2224,8 +2253,9 @@ namespace WowAddonManager
         {
             if (worker != null && worker.IsAlive)
             {
-                if (MessageBox.Show(this, "작업이 진행 중입니다. 정말 닫을까요?", "확인",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                if (Msg.Ask(this, "정말 닫을까요?",
+                        "작업이 진행 중입니다. 지금 닫으면 하던 일이 중간에 끊깁니다.",
+                        "닫기", "계속하기", null, MsgKind.Warning) != DialogResult.Yes)
                 { e.Cancel = true; return; }
             }
             base.OnFormClosing(e);

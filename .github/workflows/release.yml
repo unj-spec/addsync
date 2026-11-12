@@ -20,6 +20,10 @@ jobs:
         shell: pwsh
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-icon.ps1
 
+      - name: 설치 화면 그림 생성
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\make-wizard-images.ps1
+
       - name: 프로그램 빌드
         shell: cmd
         run: build.cmd

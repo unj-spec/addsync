@@ -72,6 +72,7 @@ namespace AddSync
         bool logOpen;
         int tab;
         int fileMode;                 // 0 내보내기, 1 설치
+        bool delivery;                // 애드온을 품은 '배달용' 실행 파일로 켜졌나
         FlatBtn btnSegExport, btnSegInstall;
         string lastOutputDir;
 
@@ -131,7 +132,13 @@ namespace AddSync
 
             int.TryParse(settings.Get("fileMode", "0"), out fileMode);
             SetTab(int.Parse(settings.Get("tab", "0")));
-            Shown += delegate { Detect(false); StartSilentUpdateCheck(); };
+            delivery = Sync.HasPayload(Application.ExecutablePath);
+            Shown += delegate
+            {
+                Detect(false);
+                if (delivery) { BeginDelivery(); return; }
+                StartSilentUpdateCheck();
+            };
             FormClosing += delegate { SaveSettings(); CleanupOnExit(); };
         }
 
@@ -567,8 +574,8 @@ namespace AddSync
             Title("파일로 내보내기", pnlExport);
 
             lblExpDesc = new Label();
-            lblExpDesc.Text = "애드온과 개인 설정을 파일 하나로 묶습니다. 키바인드 · 매크로 · 인터페이스 배치 ·\n" +
-                              "사운드 · 이름표까지 따라가고, 그래픽과 해상도만 빠집니다.";
+            lblExpDesc.Text = "애드온과 개인 설정을 파일 하나로 묶습니다. 그래픽과 해상도만 빠집니다.\n" +
+                              "파일 이름을 .exe 로 하면, 받는 쪽은 설치 없이 더블클릭만 하면 됩니다.";
             lblExpDesc.AutoSize = false;
             lblExpDesc.Location = new Point(0, 30);
             lblExpDesc.Size = new Size(620, 42);
@@ -593,7 +600,10 @@ namespace AddSync
                 using (SaveFileDialog d = new SaveFileDialog())
                 {
                     d.Title = "어디에 저장할까요?";
-                    d.Filter = "애드온 꾸러미 (*" + Sync.BundleExt + ")|*" + Sync.BundleExt;
+                    d.Filter = "애드온 꾸러미 (*" + Sync.BundleExt + ")|*" + Sync.BundleExt
+                             + "|실행 파일 — 받는 쪽에 설치 불필요 (*.exe)|*.exe";
+                    d.FilterIndex = fldExportDir.Value.EndsWith(".exe",
+                        StringComparison.OrdinalIgnoreCase) ? 2 : 1;
                     d.FileName = Path.GetFileName(fldExportDir.Value);
                     try
                     {
@@ -1455,7 +1465,8 @@ namespace AddSync
             else if (t == 2) pnlBackup.BringToFront();
             else pnlCloud.BringToFront();
 
-            if (pnlSeg != null) pnlSeg.Visible = file;
+            // 배달용 실행 파일에서는 '내보내기' 를 보여 줄 이유가 없다
+            if (pnlSeg != null) pnlSeg.Visible = file && !delivery;
             btnSegExport.Kind = fileMode == 0 ? BtnKind.Primary : BtnKind.Ghost;
             btnSegInstall.Kind = fileMode == 1 ? BtnKind.Primary : BtnKind.Ghost;
             btnSegExport.Invalidate();
@@ -1838,9 +1849,19 @@ namespace AddSync
 
             string bundle = fldExportDir.Value.Trim();
             if (bundle.Length == 0) { Info("저장할 파일을 지정하세요."); return; }
-            if (!bundle.EndsWith(Sync.BundleExt, StringComparison.OrdinalIgnoreCase))
+
+            // 이름이 .exe 면 받는 쪽에 설치가 필요 없는 실행 파일을 만든다
+            bool asExe = bundle.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+            if (!asExe && !bundle.EndsWith(Sync.BundleExt, StringComparison.OrdinalIgnoreCase))
                 bundle += Sync.BundleExt;
             fldExportDir.Value = bundle;
+
+            if (asExe && Sync.HasPayload(Application.ExecutablePath))
+            {
+                Info("이 창은 애드온이 담긴 배달용 실행 파일입니다.\n"
+                     + "실행 파일을 새로 만들려면 설치된 AddSync 에서 하세요.");
+                return;
+            }
 
             string outDir = AppInfo.WorkExportDir;    // 증분을 위해 작업 폴더는 그대로 둔다
             try { Directory.CreateDirectory(Path.GetDirectoryName(bundle)); }
@@ -1871,19 +1892,32 @@ namespace AddSync
             Log("내보내기 — 원본 " + WowCore.HumanSize(raw) + " → " + bundlePath);
             Status("내보내는 중…");
 
+            string selfExe = Application.ExecutablePath;
             Run(delegate (Reporter rep)
                 {
                     Sync.Export(o, rep);
-                    if (!pendingAutoUpload)          // 클라우드로 갈 때는 묶지 않는다
+                    if (pendingAutoUpload) return;   // 클라우드로 갈 때는 묶지 않는다
+
+                    rep("파일 하나로 묶는 중…", 0);
+                    string wam = asExe
+                        ? Path.Combine(Path.GetTempPath(), "addsync-deliver" + Sync.BundleExt)
+                        : bundlePath;
+                    int n = Sync.PackBundle(outDir, wam, rep);
+
+                    if (asExe)
                     {
-                        rep("파일 하나로 묶는 중…", 0);
-                        int n = Sync.PackBundle(outDir, bundlePath, rep);
-                        rep("묶음 " + n + " 파일 → " + Path.GetFileName(bundlePath)
-                            + " (" + WowCore.HumanSize(new FileInfo(bundlePath).Length) + ")", 100);
+                        Sync.PackSelfExtract(wam, bundlePath, selfExe, rep);
+                        try { File.Delete(wam); }
+                        catch { }
                     }
+                    rep("묶음 " + n + " 파일 → " + Path.GetFileName(bundlePath)
+                        + " (" + WowCore.HumanSize(new FileInfo(bundlePath).Length) + ")", 100);
                 },
-                "내보내기가 끝났습니다.\n\n이 파일을 USB·구글드라이브·OneDrive에 두고,\n"
-                + "다른 PC에서 '설치'로 가져오면 됩니다.\n\n" + bundlePath,
+                asExe
+                ? "실행 파일을 만들었습니다.\n\n이 파일 하나만 다른 PC로 옮겨 더블클릭하면,\n"
+                  + "그 PC의 와우를 찾아 알아서 설치합니다.\n\n" + bundlePath
+                : "내보내기가 끝났습니다.\n\n이 파일을 USB·구글드라이브·OneDrive에 두고,\n"
+                  + "다른 PC에서 '설치'로 가져오면 됩니다.\n\n" + bundlePath,
                 true);
         }
 
@@ -1942,6 +1976,42 @@ namespace AddSync
                     Sync.UnpackBundle(bundleIn, unpacked, rep);
                 },
                 null, false, delegate { ContinueInstall(o, mi); });
+        }
+
+        /// <summary>
+        /// 애드온을 품은 실행 파일로 켜졌을 때. 받는 쪽은 설치해 둔 것이 없으므로
+        /// 다른 화면은 감추고 '설치' 하나만 남긴다.
+        /// </summary>
+        void BeginDelivery()
+        {
+            tabs.Visible = false;
+            SetFileMode(1);
+            lblInsDesc.Text = "이 파일에 담긴 애드온과 개인 설정을 이 PC에 설치합니다.\n"
+                            + "와우는 완전히 종료해 두세요.";
+            fldSourceDir.Enabled = false;
+            btnSourceDir.Visible = false;
+
+            string selfExe = Application.ExecutablePath;
+            string wam = Path.Combine(AppInfo.CloudCacheDir, "deliver" + Sync.BundleExt);
+            Status("담긴 애드온을 꺼내는 중…");
+
+            Run(delegate (Reporter rep) { Sync.ExtractPayload(selfExe, wam, rep); },
+                null, false,
+                delegate
+                {
+                    fldSourceDir.Value = wam;
+                    ShowManifest();
+                    try
+                    {
+                        Manifest mi = Sync.PeekBundle(wam);
+                        List<string> names = new List<string>();
+                        foreach (Flavor f in WowCore.GetFlavors(fldWow.Value))
+                            if (mi.Flavors.ContainsKey(f.Name)) names.Add(f.Name);
+                        if (names.Count > 0) { lstFlavors.CheckOnly(names); UpdateHints(); }
+                    }
+                    catch { }
+                    Status("'파일에서 설치' 를 누르면 이 PC에 깔립니다.");
+                });
         }
 
         /// <summary>꾸러미를 푼 뒤 — 무엇이 바뀌는지 보여주고 설치한다</summary>
@@ -2068,6 +2138,13 @@ namespace AddSync
         /// <summary>로그인을 유지하지 않기로 했다면 이 PC에 남은 것을 지운다</summary>
         void CleanupOnExit()
         {
+            // 배달용 실행 파일에서 꺼낸 꾸러미는 253MB 쯤 되므로 꼭 치운다
+            if (delivery)
+            {
+                try { WowCore.DeleteTree(AppInfo.CloudCacheDir); }
+                catch { }
+            }
+
             if (chkKeepSignIn != null && chkKeepSignIn.Checked) return;
             try { GoogleDrive.SignOut(); }
             catch { }

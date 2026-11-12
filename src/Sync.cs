@@ -414,6 +414,97 @@ namespace AddSync
         // ── 파일 하나로 묶기 / 풀기 ─────────────────────────────
         public const string BundleExt = ".wam";
 
+        // ── 스스로 푸는 실행 파일 ───────────────────────────────
+        // 프로그램 뒤에 꾸러미를 붙이고, 맨 끝에 표식을 남긴다.
+        //   [ AddSync.exe ][ .wam 내용 ][ 길이 8바이트 ][ 매직 8바이트 ]
+        // .NET exe 는 뒤에 무엇이 붙어도 그대로 실행된다.
+        static readonly byte[] Magic = Encoding.ASCII.GetBytes("ADDSYNC1");
+        const int TrailerLen = 16;
+
+        /// <summary>받는 쪽에 설치가 필요 없는 실행 파일을 만든다</summary>
+        public static void PackSelfExtract(string bundleFile, string destExe,
+                                           string programExe, Reporter report)
+        {
+            if (report != null) report("실행 파일로 묶는 중…", 0);
+
+            using (FileStream outFs = new FileStream(destExe, FileMode.Create, FileAccess.Write))
+            {
+                using (FileStream prog = File.OpenRead(programExe)) prog.CopyTo(outFs);
+
+                long payloadAt = outFs.Position;
+                using (FileStream wam = File.OpenRead(bundleFile)) wam.CopyTo(outFs);
+                long payloadLen = outFs.Position - payloadAt;
+
+                outFs.Write(BitConverter.GetBytes(payloadLen), 0, 8);
+                outFs.Write(Magic, 0, Magic.Length);
+            }
+
+            if (report != null)
+                report("실행 파일 " + WowCore.HumanSize(new FileInfo(destExe).Length), 100);
+        }
+
+        /// <summary>이 실행 파일이 꾸러미를 품고 있는지 본다</summary>
+        public static bool HasPayload(string exePath)
+        {
+            long at, len;
+            return FindPayload(exePath, out at, out len);
+        }
+
+        static bool FindPayload(string exePath, out long at, out long len)
+        {
+            at = 0; len = 0;
+            try
+            {
+                using (FileStream fs = File.OpenRead(exePath))
+                {
+                    if (fs.Length < TrailerLen + 1024) return false;
+                    fs.Seek(-TrailerLen, SeekOrigin.End);
+
+                    byte[] tail = new byte[TrailerLen];
+                    if (fs.Read(tail, 0, TrailerLen) != TrailerLen) return false;
+
+                    for (int i = 0; i < Magic.Length; i++)
+                        if (tail[8 + i] != Magic[i]) return false;
+
+                    len = BitConverter.ToInt64(tail, 0);
+                    at = fs.Length - TrailerLen - len;
+                    return len > 0 && at > 0;
+                }
+            }
+            catch { return false; }
+        }
+
+        /// <summary>품고 있는 꾸러미를 꺼내 .wam 파일로 만든다</summary>
+        public static string ExtractPayload(string exePath, string destFile, Reporter report)
+        {
+            long at, len;
+            if (!FindPayload(exePath, out at, out len))
+                throw new InvalidDataException("이 파일에는 애드온 꾸러미가 들어 있지 않습니다.");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destFile));
+            if (report != null) report("담긴 애드온을 꺼내는 중…", 0);
+
+            using (FileStream fs = File.OpenRead(exePath))
+            using (FileStream outFs = new FileStream(destFile, FileMode.Create, FileAccess.Write))
+            {
+                fs.Seek(at, SeekOrigin.Begin);
+                byte[] buf = new byte[1 << 20];
+                long left = len;
+                long done = 0;
+                while (left > 0)
+                {
+                    int want = (int)Math.Min(buf.Length, left);
+                    int got = fs.Read(buf, 0, want);
+                    if (got <= 0) break;
+                    outFs.Write(buf, 0, got);
+                    left -= got;
+                    done += got;
+                    if (report != null) report(null, (int)(done * 100L / len));
+                }
+            }
+            return destFile;
+        }
+
         /// <summary>
         /// 내보낸 폴더를 파일 하나로 묶는다. 안에 든 것이 이미 zip 이라
         /// 다시 압축하지 않고 담기만 한다 (시간만 걸리고 크기는 거의 그대로다).

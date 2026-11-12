@@ -13,3 +13,7 @@ backup/
 # 윈도우
 Thumbs.db
 desktop.ini
+
+# 로컬에만 두는 문서 (깃에는 올리지 않는다)
+README.local.md
+PLAN.md

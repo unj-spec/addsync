@@ -16,7 +16,7 @@ namespace AddSync
     public static class AppInfo
     {
         /// <summary>이 값 하나만 올리면 설치 파일과 자동 업데이트 버전이 같이 올라간다</summary>
-        public const string Version = "1.1.1";
+        public const string Version = "1.1.2";
 
         public const string Name = "AddSync";
         public const string Author = "made by Bowluvr";

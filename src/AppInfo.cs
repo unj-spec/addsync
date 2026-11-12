@@ -16,7 +16,7 @@ namespace WowAddonManager
     public static class AppInfo
     {
         /// <summary>이 값 하나만 올리면 설치 파일과 자동 업데이트 버전이 같이 올라간다</summary>
-        public const string Version = "1.0.1";
+        public const string Version = "1.0.2";
 
         public const string Name = "WoW 애드온 매니저";
         public const string RepoOwner = "unj-spec";

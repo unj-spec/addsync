@@ -1242,7 +1242,7 @@ namespace WowAddonManager
 
                     lstFlavors.CheckOnly(names);
                     UpdateHints();
-                    SetTab(1);
+                    SetFileMode(1);      // 파일 탭의 '설치' 쪽
                     StartInstall();
                 });
         }
@@ -1264,7 +1264,7 @@ namespace WowAddonManager
             recordAfterJob = true;
             recordRemoteAt = null;
             pendingAutoUpload = true;
-            SetTab(0);
+            SetFileMode(0);      // 파일 탭의 '내보내기' 쪽
             StartExport();
         }
 
@@ -1293,7 +1293,13 @@ namespace WowAddonManager
             Log("드라이브에서 받기 → " + dir);
             Status("드라이브에서 받는 중…");
             Run(delegate (Reporter rep) { GoogleDrive.DownloadFolder(dir, rep); },
-                "드라이브에서 받았습니다.\n\n'설치' 탭에서 설치를 진행하세요.", false);
+                null, false,
+                delegate
+                {
+                    fldSourceDir.Value = dir;    // 받아 둔 폴더를 설치 원본으로 삼는다
+                    SetFileMode(1);
+                    Info("드라이브에서 받았습니다.\n\n'파일로 주고받기 → 설치' 에서 설치를 진행하세요.");
+                });
         }
 
         Check MakeCheck(string text, Point p, bool chk)
@@ -1609,10 +1615,13 @@ namespace WowAddonManager
             }
 
             long fileSize = 0;
-            try { fileSize = new FileInfo(fldSourceDir.Value).Length; }
-            catch { }
+            if (!SourceIsFolder)
+                try { fileSize = new FileInfo(fldSourceDir.Value).Length; }
+                catch { }
             cardInstall.FootLeft = cardInstall.Rows.Count > 0
-                ? "파일 크기 " + WowCore.HumanSize(fileSize) + " · 원본 합계" : "";
+                ? (fileSize > 0 ? "파일 크기 " + WowCore.HumanSize(fileSize) + " · 원본 합계"
+                                : "원본 합계")
+                : "";
             cardInstall.FootRight = WowCore.HumanSize(total);
             cardInstall.Size = new Size(pnlInstall.Width, cardInstall.NeededHeight);
             cardInstall.Invalidate();
@@ -1630,7 +1639,10 @@ namespace WowAddonManager
                 FlavorPack p;
                 if (!mi.Flavors.TryGetValue(f.Name, out p) || p.WtfZip.Length == 0) continue;
 
-                List<string> src = Sync.AccountsInBundle(fldSourceDir.Value, p.WtfZip);
+                List<string> src = SourceIsFolder
+                    ? Sync.AccountsInZip(Path.Combine(fldSourceDir.Value,
+                                                      p.WtfZip.Replace('/', '\\')))
+                    : Sync.AccountsInBundle(fldSourceDir.Value, p.WtfZip);
                 List<string> dst = Sync.AccountsOnDisk(Path.Combine(f.Path, "WTF"));
                 if (src.Count != 1 || dst.Count != 1) continue;
                 if (string.Equals(src[0], dst[0], StringComparison.OrdinalIgnoreCase)) continue;
@@ -1737,12 +1749,32 @@ namespace WowAddonManager
             lvAddons.StretchLastColumn();
         }
 
+        /// <summary>
+        /// 설치 원본은 '파일에서 설치' 의 .wam 일 수도 있고,
+        /// 드라이브에서 받아 둔 폴더일 수도 있다.
+        /// </summary>
+        bool SourceIsFolder
+        {
+            get
+            {
+                try { return Directory.Exists(fldSourceDir.Value); }
+                catch { return false; }
+            }
+        }
+
+        Manifest ReadSourceManifest()
+        {
+            return SourceIsFolder
+                ? Sync.ReadManifest(fldSourceDir.Value)
+                : Sync.PeekBundle(fldSourceDir.Value);
+        }
+
         void ShowManifest()
         {
             if (lblInsInfo == null) return;
             try
             {
-                Manifest mi = Sync.PeekBundle(fldSourceDir.Value);
+                Manifest mi = ReadSourceManifest();
                 List<string> names = new List<string>();
                 foreach (string k in mi.Flavors.Keys) names.Add(VersionList.FlavorName(k));
                 lblInsInfo.ForeColor = Theme.Ok;
@@ -1828,7 +1860,7 @@ namespace WowAddonManager
         {
             if (!CheckWow()) return;
             Manifest mi;
-            try { mi = Sync.PeekBundle(fldSourceDir.Value); }
+            try { mi = ReadSourceManifest(); }
             catch (Exception ex) { Info(ex.Message); return; }
 
             List<string> names = new List<string>();
@@ -1848,7 +1880,11 @@ namespace WowAddonManager
             List<string> friendly = new List<string>();
             foreach (string n in names) friendly.Add(VersionList.FlavorName(n));
 
-            string unpacked = Path.Combine(AppInfo.CloudCacheDir, "manual");
+            // 폴더를 그대로 받았다면 풀 것이 없다
+            bool fromFolder = SourceIsFolder;
+            string unpacked = fromFolder
+                ? fldSourceDir.Value
+                : Path.Combine(AppInfo.CloudCacheDir, "manual");
             InstallOptions o = new InstallOptions();
             o.WowPath = fldWow.Value;
             o.SourceDir = unpacked;
@@ -1861,10 +1897,13 @@ namespace WowAddonManager
             o.SourceAccountId = srcAccountId;
             o.TargetAccountId = dstAccountId;
 
-            // 미리보기는 꾸러미 안을 들여다봐야 하므로 먼저 푼다
             string bundleIn = fldSourceDir.Value;
             Log("");
             Log("설치 — " + bundleIn + " → " + o.WowPath);
+
+            if (fromFolder) { ContinueInstall(o, mi); return; }
+
+            // 미리보기는 꾸러미 안을 들여다봐야 하므로 먼저 푼다
             Status("파일 푸는 중…");
             Run(delegate (Reporter rep)
                 {

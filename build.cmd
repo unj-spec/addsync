@@ -1,5 +1,5 @@
 @echo off
-rem Build WowAddonManager.exe with the .NET Framework csc.exe (no SDK required)
+rem Build AddSync.exe with the .NET Framework csc.exe (no SDK required)
 setlocal
 
 set CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe
@@ -17,7 +17,7 @@ set REFS=/reference:System.dll /reference:System.Core.dll /reference:System.Secu
 
 "%CSC%" /nologo /target:winexe /platform:anycpu /optimize+ /utf8output ^
   /win32icon:"%~dp0src\app.ico" /resource:"%~dp0src\app.ico",app.ico ^
-  /out:"%~dp0WowAddonManager.exe" %REFS% ^
+  /out:"%~dp0AddSync.exe" %REFS% ^
   "%~dp0src\AppInfo.cs" "%~dp0src\Json.cs" "%~dp0src\WowCore.cs" "%~dp0src\Sync.cs" "%~dp0src\GoogleDrive.cs" "%~dp0src\Updater.cs" "%~dp0src\Theme.cs" "%~dp0src\MsgForm.cs" "%~dp0src\PreviewForm.cs" "%~dp0src\GoogleSetupForm.cs" "%~dp0src\MainForm.cs"
 
 if errorlevel 1 (
@@ -27,4 +27,4 @@ if errorlevel 1 (
 )
 
 echo.
-echo Built: %~dp0WowAddonManager.exe
+echo Built: %~dp0AddSync.exe

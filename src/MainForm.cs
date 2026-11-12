@@ -218,10 +218,11 @@ namespace WowAddonManager
                 Graphics g = e.Graphics;
                 if (Icon != null)
                 {
-                    Rectangle logo = new Rectangle(14, 11, 22, 22);
-                    Theme.FillRound(g, logo, 5, Theme.Accent);
-                    using (Icon ic = new Icon(Icon, 16, 16))
-                        g.DrawIcon(ic, new Rectangle(logo.X + 3, logo.Y + 3, 16, 16));
+                    // 아이콘 자체가 둥근 타일이라 따로 바탕을 깔지 않는다
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    using (Icon ic = new Icon(Icon, 32, 32))
+                    using (Bitmap bm = ic.ToBitmap())
+                        g.DrawImage(bm, new Rectangle(14, 10, 24, 24));
                 }
                 TextRenderer.DrawText(g, AppInfo.Name, Theme.BodyBold,
                     new Rectangle(46, 0, 300, pnlTitle.Height), Theme.Text,
@@ -579,7 +580,7 @@ namespace WowAddonManager
 
             fldExportDir = new Field();
             fldExportDir.Location = new Point(0, 104);
-            fldExportDir.Value = settings.Get("bundleFile", AppInfo.DefaultBundleFile);
+            fldExportDir.Value = AppInfo.FixOldPath(settings.Get("bundleFile", AppInfo.DefaultBundleFile));
             EnableFolderDrop(fldExportDir);
             pnlExport.Controls.Add(fldExportDir);
 
@@ -660,7 +661,7 @@ namespace WowAddonManager
 
             fldSourceDir = new Field();
             fldSourceDir.Location = new Point(0, 104);
-            fldSourceDir.Value = settings.Get("sourceFile", AppInfo.DefaultBundleFile);
+            fldSourceDir.Value = AppInfo.FixOldPath(settings.Get("sourceFile", AppInfo.DefaultBundleFile));
             fldSourceDir.Box.TextChanged += delegate { ShowManifest(); };
             EnableFolderDrop(fldSourceDir);
             pnlInstall.Controls.Add(fldSourceDir);

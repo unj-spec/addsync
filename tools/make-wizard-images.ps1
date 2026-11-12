@@ -10,17 +10,19 @@ $root = Split-Path -Parent $PSScriptRoot
 $out  = Join-Path $root 'installer'
 if (-not (Test-Path $out)) { New-Item -ItemType Directory -Path $out | Out-Null }
 
+$logo = [Drawing.Image]::FromFile((Join-Path $root 'assets\addsync.png'))
+$mark = [Drawing.Image]::FromFile((Join-Path $root 'assets\addsync-mark.png'))
+
 # 프로그램 팔레트 (Theme.cs 와 같은 값)
 $cTitle  = [Drawing.Color]::FromArgb(13, 15, 18)
 $cPanel  = [Drawing.Color]::FromArgb(18, 20, 25)
-$cAccent = [Drawing.Color]::FromArgb(27, 133, 232)
-$cText   = [Drawing.Color]::FromArgb(230, 232, 236)
 $cMuted  = [Drawing.Color]::FromArgb(108, 116, 131)
 
 function New-Bmp([int]$w, [int]$h) {
     $bmp = New-Object Drawing.Bitmap $w, $h
     $g = [Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = 'AntiAlias'
+    $g.InterpolationMode = 'HighQualityBicubic'
     $g.TextRenderingHint = 'ClearTypeGridFit'
     return @($bmp, $g)
 }
@@ -42,27 +44,15 @@ $g.FillRectangle($grad, 0, 0, $w, $h)
 $glow = New-Object Drawing.SolidBrush ([Drawing.Color]::FromArgb(26, 27, 133, 232))
 $g.FillEllipse($glow, -70, 170, 300, 300)
 
-# 아이콘 자리 — 둥근 사각형에 머리글자
-$box = New-Object Drawing.Rectangle 24, 36, 56, 56
-$path = New-Object Drawing.Drawing2D.GraphicsPath
-$d = 24
-$path.AddArc($box.X, $box.Y, $d, $d, 180, 90)
-$path.AddArc($box.Right - $d, $box.Y, $d, $d, 270, 90)
-$path.AddArc($box.Right - $d, $box.Bottom - $d, $d, $d, 0, 90)
-$path.AddArc($box.X, $box.Bottom - $d, $d, $d, 90, 90)
-$path.CloseFigure()
-$g.FillPath((New-Object Drawing.SolidBrush $cAccent), $path)
+$g.DrawImage($logo, (New-Object Drawing.Rectangle 32, 46, 128, 128))
 
 $fmt = New-Object Drawing.StringFormat
-$fmt.Alignment = 'Center'; $fmt.LineAlignment = 'Center'
-$boxF = New-Object Drawing.RectangleF 24, 36, 56, 56
-$g.DrawString('W', (Font 24 'Bold'), [Drawing.Brushes]::White, $boxF, $fmt)
-
-$g.DrawString("WoW`n애드온`n매니저", (Font 15 'Bold'),
-    (New-Object Drawing.SolidBrush $cText), 24, 112)
-
-$g.DrawString("애드온과 설정을`n그대로 옮깁니다", (Font 8.5 'Regular'),
-    (New-Object Drawing.SolidBrush $cMuted), 24, 202)
+$fmt.Alignment = 'Center'
+$brush = New-Object Drawing.SolidBrush $cMuted
+$g.DrawString('애드온과 설정을', (Font 9 'Regular'), $brush,
+    (New-Object Drawing.RectangleF 0, 198, $w, 20), $fmt)
+$g.DrawString('그대로 옮깁니다', (Font 9 'Regular'), $brush,
+    (New-Object Drawing.RectangleF 0, 216, $w, 20), $fmt)
 
 $g.Dispose()
 $bmp.Save((Join-Path $out 'wizard-left.bmp'), [Drawing.Imaging.ImageFormat]::Bmp)
@@ -72,20 +62,10 @@ $bmp.Dispose()
 $w = 110; $h = 110
 $r = New-Bmp $w $h; $bmp = $r[0]; $g = $r[1]
 $g.Clear($cTitle)      # 머리글도 어둡게 입힌다
-
-$box = New-Object Drawing.Rectangle 27, 27, 56, 56
-$path = New-Object Drawing.Drawing2D.GraphicsPath
-$path.AddArc($box.X, $box.Y, $d, $d, 180, 90)
-$path.AddArc($box.Right - $d, $box.Y, $d, $d, 270, 90)
-$path.AddArc($box.Right - $d, $box.Bottom - $d, $d, $d, 0, 90)
-$path.AddArc($box.X, $box.Bottom - $d, $d, $d, 90, 90)
-$path.CloseFigure()
-$g.FillPath((New-Object Drawing.SolidBrush $cAccent), $path)
-$boxF = New-Object Drawing.RectangleF 27, 27, 56, 56
-$g.DrawString('W', (Font 22 'Bold'), [Drawing.Brushes]::White, $boxF, $fmt)
-
+$g.DrawImage($mark, (New-Object Drawing.Rectangle 23, 23, 64, 64))
 $g.Dispose()
 $bmp.Save((Join-Path $out 'wizard-top.bmp'), [Drawing.Imaging.ImageFormat]::Bmp)
 $bmp.Dispose()
 
+$logo.Dispose(); $mark.Dispose()
 Write-Host "만들었습니다: $out"

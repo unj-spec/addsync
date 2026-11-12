@@ -1,58 +1,34 @@
-﻿# app.ico 생성 — 프로그램 아이콘을 코드로 만든다 (외부 이미지 파일 의존 없음)
+﻿# app.ico 생성 — assets\addsync.png 과 assets\addsync-mark.png 에서 만든다.
+# 큰 크기는 글자가 든 전체 로고를, 작은 크기는 글자를 뺀 A 마크를 쓴다.
 # 사용: powershell -ExecutionPolicy Bypass -File tools\make-icon.ps1
 Add-Type -AssemblyName System.Drawing
 
-$out = Join-Path (Split-Path $PSScriptRoot -Parent) "src\app.ico"
-$sizes = @(256, 64, 48, 32, 24, 16)
+$root = Split-Path $PSScriptRoot -Parent
+$out  = Join-Path $root "src\app.ico"
+$full = Join-Path $root "assets\addsync.png"
+$mark = Join-Path $root "assets\addsync-mark.png"
+
+foreach ($p in @($full, $mark)) {
+    if (-not (Test-Path $p)) { throw "그림을 찾을 수 없습니다: $p" }
+}
+
+$srcFull = [System.Drawing.Image]::FromFile($full)
+$srcMark = [System.Drawing.Image]::FromFile($mark)
+
+# 작은 크기에서는 'AddSync' 글자가 뭉개지므로 마크만 쓴다
+$sizes = @(256, 128, 64, 48, 32, 24, 16)
 
 function New-IconBitmap {
     param([int]$S)
+    $src = if ($S -ge 128) { $srcFull } else { $srcMark }
+
     $bmp = New-Object System.Drawing.Bitmap($S, $S, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.SmoothingMode = 'AntiAlias'
     $g.Clear([System.Drawing.Color]::Transparent)
-
-    $u = $S / 32.0   # 32px 기준 좌표계
-
-    # 둥근 사각형 배경
-    $r = [int](6 * $u)
-    $rect = New-Object System.Drawing.Rectangle(0, 0, ($S - 1), ($S - 1))
-    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $d = $r * 2
-    $path.AddArc($rect.X, $rect.Y, $d, $d, 180, 90)
-    $path.AddArc(($rect.Right - $d), $rect.Y, $d, $d, 270, 90)
-    $path.AddArc(($rect.Right - $d), ($rect.Bottom - $d), $d, $d, 0, 90)
-    $path.AddArc($rect.X, ($rect.Bottom - $d), $d, $d, 90, 90)
-    $path.CloseFigure()
-    # 파란 바탕 (배틀넷 런처 톤)
-    $bgRect = New-Object System.Drawing.Rectangle(0, 0, $S, $S)
-    $bg = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-        $bgRect,
-        [System.Drawing.Color]::FromArgb(255, 45, 150, 240),
-        [System.Drawing.Color]::FromArgb(255, 11, 79, 148), 90)
-    $g.FillPath($bg, $path)
-
-    # 상자 (애드온 꾸러미)
-    $white = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
-    $boxX = 7 * $u; $boxY = 15 * $u; $boxW = 18 * $u; $boxH = 11 * $u
-    $g.FillRectangle($white, $boxX, $boxY, $boxW, $boxH)
-
-    # 상자 뚜껑 띠
-    $band = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 20, 92, 165))
-    $g.FillRectangle($band, ($boxX + 7.5 * $u), $boxY, (3 * $u), $boxH)
-
-    # 위로 향하는 화살표 (옮긴다는 뜻)
-    $pts = @(
-        (New-Object System.Drawing.PointF(([float](16 * $u)), ([float](4 * $u)))),
-        (New-Object System.Drawing.PointF(([float](23 * $u)), ([float](11 * $u)))),
-        (New-Object System.Drawing.PointF(([float](18.6 * $u)), ([float](11 * $u)))),
-        (New-Object System.Drawing.PointF(([float](18.6 * $u)), ([float](13.5 * $u)))),
-        (New-Object System.Drawing.PointF(([float](13.4 * $u)), ([float](13.5 * $u)))),
-        (New-Object System.Drawing.PointF(([float](13.4 * $u)), ([float](11 * $u)))),
-        (New-Object System.Drawing.PointF(([float](9 * $u)), ([float](11 * $u))))
-    )
-    $g.FillPolygon($white, $pts)
-
+    $g.InterpolationMode = 'HighQualityBicubic'
+    $g.PixelOffsetMode = 'HighQuality'
+    $g.SmoothingMode = 'AntiAlias'
+    $g.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $S, $S)))
     $g.Dispose()
     return $bmp
 }
@@ -112,6 +88,8 @@ foreach ($s in $sizes) {
     }
     $bmp.Dispose()
 }
+
+$srcFull.Dispose(); $srcMark.Dispose()
 
 $fs = [System.IO.File]::Create($out)
 $bw = New-Object System.IO.BinaryWriter($fs)

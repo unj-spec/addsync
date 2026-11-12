@@ -1,14 +1,14 @@
-﻿; WoW 애드온 매니저 설치 프로그램
+﻿; AddSync 설치 프로그램
 ; 빌드: tools\build-installer.cmd  (또는 ISCC.exe installer.iss)
 
-#define AppName "WoW 애드온 매니저"
-#define AppNameEn "WoW Addon Manager"
-#define AppExe "WowAddonManager.exe"
+#define AppName "AddSync"
+#define AppNameEn "AddSync"
+#define AppExe "AddSync.exe"
 #define AppPublisher "Bowluvr"
 #define AppAuthor "made by Bowluvr"
 #define AppUrl "https://github.com/unj-spec/wow-addon-manager"
 ; exe 의 버전 정보에서 가져온다 (1.0.0.0 → 1.0.0)
-#define FullVer GetVersionNumbersString("WowAddonManager.exe")
+#define FullVer GetVersionNumbersString("AddSync.exe")
 #define AppVersion Copy(FullVer, 1, RPos(".", FullVer) - 1)
 
 [Setup]
@@ -30,7 +30,7 @@ DisableProgramGroupPage=yes
 AllowNoIcons=yes
 
 OutputDir=dist
-OutputBaseFilename=WowAddonManager-Setup-{#AppVersion}
+OutputBaseFilename=AddSync-Setup-{#AppVersion}
 SetupIconFile=src\app.ico
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
@@ -61,8 +61,16 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 Name: "desktopicon"; Description: "바탕 화면에 바로 가기 만들기"; GroupDescription: "추가 작업:"
 
 [Files]
-Source: "WowAddonManager.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "AddSync.exe";         DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE";             DestDir: "{app}"; Flags: ignoreversion
+
+; 이름을 바꾸기 전 설치본이 남긴 것
+[InstallDelete]
+Type: files; Name: "{app}\WowAddonManager.exe"
+Type: files; Name: "{app}\README.md"
+Type: files; Name: "{group}\WoW 애드온 매니저.lnk"
+Type: files; Name: "{group}\WoW 애드온 매니저 제거.lnk"
+Type: files; Name: "{autodesktop}\WoW 애드온 매니저.lnk"
 
 [Icons]
 Name: "{group}\{#AppName}";          Filename: "{app}\{#AppExe}"

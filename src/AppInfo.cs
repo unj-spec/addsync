@@ -3,9 +3,9 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 
-[assembly: AssemblyTitle("WoW 애드온 매니저")]
+[assembly: AssemblyTitle("AddSync")]
 [assembly: AssemblyDescription("와우 애드온과 설정을 다른 PC로 그대로 옮깁니다")]
-[assembly: AssemblyProduct("WoW Addon Manager")]
+[assembly: AssemblyProduct("AddSync")]
 [assembly: AssemblyCompany("unj-spec")]
 [assembly: AssemblyCopyright("MIT License")]
 [assembly: AssemblyVersion(WowAddonManager.AppInfo.Version)]
@@ -16,9 +16,9 @@ namespace WowAddonManager
     public static class AppInfo
     {
         /// <summary>이 값 하나만 올리면 설치 파일과 자동 업데이트 버전이 같이 올라간다</summary>
-        public const string Version = "1.0.3";
+        public const string Version = "1.1.0";
 
-        public const string Name = "WoW 애드온 매니저";
+        public const string Name = "AddSync";
         public const string Author = "made by Bowluvr";
         public const string RepoOwner = "unj-spec";
 
@@ -65,13 +65,74 @@ namespace WowAddonManager
             get { return RepoUrl + "/releases"; }
         }
 
+        /// <summary>자료를 두는 폴더 이름 (예전 이름은 WowAddonManager 였다)</summary>
+        public const string FolderName = "AddSync";
+        const string OldFolderName = "WowAddonManager";
+
+        /// <summary>
+        /// 이름을 바꾸기 전에 쓰던 폴더가 있으면 한 번만 옮겨 온다.
+        /// 설정·백업·받아 둔 꾸러미를 잃지 않게.
+        /// </summary>
+        static string Moved(Environment.SpecialFolder where, string tail)
+        {
+            string root = Environment.GetFolderPath(where);
+            string now = Path.Combine(root, FolderName);
+            string before = Path.Combine(root, OldFolderName);
+
+            try
+            {
+                if (Directory.Exists(before))
+                {
+                    if (!Directory.Exists(now)) Directory.Move(before, now);
+                    // 통째로 옮기지 못했으면(파일이 열려 있는 등) 하나씩 옮긴다
+                    else CopyMissing(before, now);
+                }
+            }
+            catch { }
+
+            return tail.Length == 0 ? now : Path.Combine(now, tail);
+        }
+
+        /// <summary>새 폴더에 아직 없는 것만 옮겨 담는다</summary>
+        static void CopyMissing(string from, string to)
+        {
+            string[] files;
+            try { files = Directory.GetFiles(from, "*", SearchOption.AllDirectories); }
+            catch { return; }
+
+            foreach (string f in files)
+            {
+                try
+                {
+                    string rel = f.Substring(from.Length).TrimStart(Path.DirectorySeparatorChar);
+                    string g = Path.Combine(to, rel);
+                    if (File.Exists(g)) continue;
+                    Directory.CreateDirectory(Path.GetDirectoryName(g));
+                    File.Copy(f, g);
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// 설정에 저장된 예전 폴더 경로를 새 이름으로 바꿔 준다.
+        /// (…\WowAddonManager\… → …\AddSync\…)
+        /// </summary>
+        public static string FixOldPath(string p)
+        {
+            if (string.IsNullOrEmpty(p)) return p;
+            string oldSeg = Path.DirectorySeparatorChar + OldFolderName + Path.DirectorySeparatorChar;
+            string newSeg = Path.DirectorySeparatorChar + FolderName + Path.DirectorySeparatorChar;
+            int i = p.IndexOf(oldSeg, StringComparison.OrdinalIgnoreCase);
+            if (i < 0) return p;
+            return p.Substring(0, i) + newSeg + p.Substring(i + oldSeg.Length);
+        }
+
         public static string DataDir
         {
             get
             {
-                string d = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "WowAddonManager");
+                string d = Moved(Environment.SpecialFolder.ApplicationData, "");
                 try { Directory.CreateDirectory(d); }
                 catch { }
                 return d;
@@ -83,9 +144,7 @@ namespace WowAddonManager
         {
             get
             {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    @"WowAddonManager\backup");
+                return Moved(Environment.SpecialFolder.MyDocuments, "backup");
             }
         }
 
@@ -94,9 +153,7 @@ namespace WowAddonManager
         {
             get
             {
-                string d = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    @"WowAddonManager\cloud");
+                string d = Moved(Environment.SpecialFolder.LocalApplicationData, "cloud");
                 try { Directory.CreateDirectory(d); }
                 catch { }
                 return d;
@@ -108,9 +165,7 @@ namespace WowAddonManager
         {
             get
             {
-                string d = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    @"WowAddonManager\work");
+                string d = Moved(Environment.SpecialFolder.LocalApplicationData, "work");
                 try { Directory.CreateDirectory(d); }
                 catch { }
                 return d;
@@ -122,9 +177,7 @@ namespace WowAddonManager
         {
             get
             {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    @"WowAddonManager\WowAddons.wam");
+                return Moved(Environment.SpecialFolder.MyDocuments, "AddSync.wam");
             }
         }
 
@@ -132,9 +185,7 @@ namespace WowAddonManager
         {
             get
             {
-                return Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    @"WowAddonManager\export");
+                return Moved(Environment.SpecialFolder.MyDocuments, "export");
             }
         }
     }

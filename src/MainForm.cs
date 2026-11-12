@@ -1035,9 +1035,9 @@ namespace AddSync
             lblSyncState.Text = !on
                 ? "로그인하면 동기화할 수 있습니다."
                 : (lastAt.Length == 0
-                    ? "아직 동기화한 적이 없습니다.\n누르면 어느 쪽이 최신인지 보고 알아서 올리거나 받습니다."
+                    ? "아직 동기화한 적이 없습니다.\n누르면 어느 쪽이 최신인지 보고, 올릴지 받을지 먼저 물어봅니다."
                     : "마지막 동기화: " + Pretty(lastAt)
-                      + "\n누르면 어느 쪽이 최신인지 보고 알아서 올리거나 받습니다.");
+                      + "\n누르면 어느 쪽이 최신인지 보고, 올릴지 받을지 먼저 물어봅니다.");
             lblCloudNote.Text =
                 "• 각자 본인 구글 계정으로 로그인하고, 파일은 본인 드라이브에 저장됩니다.\n"
               + "• 이 프로그램이 만든 파일만 접근합니다 (drive.file 권한). 다른 파일은 보지 않습니다.\n"
@@ -1116,7 +1116,7 @@ namespace AddSync
             return iso;
         }
 
-        /// <summary>어느 쪽이 최신인지 보고 알아서 올리거나 받는다</summary>
+        /// <summary>어느 쪽이 최신인지 보고, 올릴지 받을지 확인받는다</summary>
         void CloudSync()
         {
             if (!GoogleDrive.IsConfigured) { CloudSetup(); return; }
@@ -1153,50 +1153,96 @@ namespace AddSync
                 Log("꾸러미 규칙이 바뀌어 다시 올립니다 (" + lastRule + " → " + BundleRule + ")");
                 localChanged = true;
             }
-            bool remoteChanged = remote != null && remote.Exists && remote.ExportedAt != lastAt;
+            bool hasRemote = remote != null && remote.Exists;
+            bool remoteChanged = hasRemote && remote.ExportedAt != lastAt;
 
-            // 드라이브가 비었으면 올릴 수밖에 없다
-            if (remote == null || !remote.Exists)
+            int addons = 0;
+            foreach (Flavor f in sel) addons += f.AddOnCount;
+
+            // 어느 쪽을 권할지만 정하고, 실제로 하기 전에 반드시 확인을 받는다
+            string why;
+            bool up;
+            MsgKind kind = MsgKind.Question;
+
+            if (!hasRemote)
             {
-                Status("드라이브가 비어 있습니다. 이 PC 상태를 올립니다.");
-                SyncUp();
+                why = "드라이브에 올라간 것이 아직 없습니다.";
+                up = true;
+            }
+            else if (first && addons == 0)
+            {
+                why = "이 PC 에는 애드온이 없고 드라이브에는 있습니다.";
+                up = false;
+            }
+            else if (first)
+            {
+                why = "이 PC 와 드라이브 양쪽에 애드온이 있습니다. 어느 쪽을 기준으로 할지 골라 주세요.";
+                up = false;
+                kind = MsgKind.Warning;
+            }
+            else if (localChanged && remoteChanged)
+            {
+                why = "양쪽 다 바뀌었습니다. 한쪽은 덮어쓰게 됩니다.";
+                up = false;
+                kind = MsgKind.Warning;
+            }
+            else if (remoteChanged)
+            {
+                why = "드라이브 것이 이 PC 보다 새롭습니다.";
+                up = false;
+            }
+            else if (localChanged)
+            {
+                why = "이 PC 것이 마지막 동기화 뒤에 바뀌었습니다.";
+                up = true;
+            }
+            else
+            {
+                Status("이미 최신입니다.");
+                Info("이미 최신입니다.\n\n드라이브와 이 PC 가 같은 상태입니다.");
                 return;
             }
 
-            if (first)
-            {
-                // 처음 동기화: 이 PC 와우가 비어 있으면 받는 게 맞다
-                int addons = 0;
-                foreach (Flavor f in sel) addons += f.AddOnCount;
-                if (addons == 0) { SyncDown(remote); return; }
+            AskDirection(up, remote, hasRemote, addons, why, kind);
+        }
 
-                DialogResult r = Msg.Ask(this, "어느 쪽을 기준으로 할까요?",
-                    "이 PC와 드라이브 양쪽에 애드온이 있습니다.\n\n"
-                    + "드라이브 — " + remote.SourcePC + " 에서 " + Pretty(remote.ExportedAt) + "\n"
-                    + "이 PC — 애드온 " + addons + "개",
-                    "드라이브 것을 받기", "이 PC 것을 올리기", "취소", MsgKind.Question);
-                if (r == DialogResult.Yes) SyncDown(remote);
-                else if (r == DialogResult.No) SyncUp();
+        /// <summary>올리는지 받는지 반드시 확인받는다. 권하는 쪽이 첫 단추.</summary>
+        void AskDirection(bool up, GoogleDrive.RemoteState remote, bool hasRemote,
+                          int addons, string why, MsgKind kind)
+        {
+            string body = why + "\n\n"
+                + "드라이브 — " + (hasRemote
+                        ? remote.SourcePC + " 에서 " + Pretty(remote.ExportedAt)
+                        : "비어 있음")
+                + "\n이 PC — 애드온 " + addons + "개\n\n"
+                + "올리기 = 이 PC → 드라이브 (드라이브 것이 덮어써집니다)\n"
+                + "받기 = 드라이브 → 이 PC (이 PC 애드온과 설정이 덮어써집니다)";
+
+            List<string> labels = new List<string>();
+            List<DialogResult> rs = new List<DialogResult>();
+            if (up)
+            {
+                labels.Add("올리기"); rs.Add(DialogResult.Yes);
+                if (hasRemote) { labels.Add("받기"); rs.Add(DialogResult.No); }
+            }
+            else
+            {
+                labels.Add("받기"); rs.Add(DialogResult.Yes);
+                labels.Add("올리기"); rs.Add(DialogResult.No);
+            }
+            labels.Add("취소"); rs.Add(DialogResult.Cancel);
+
+            DialogResult r = Msg.Show(this, "어느 쪽으로 동기화할까요?", body, kind,
+                                      labels.ToArray(), rs.ToArray());
+            if (r == DialogResult.Cancel)
+            {
+                Status("동기화를 취소했습니다.");
                 return;
             }
 
-            if (localChanged && remoteChanged)
-            {
-                DialogResult r = Msg.Ask(this, "어느 쪽을 살릴까요?",
-                    "양쪽 다 바뀌었습니다. 한쪽은 덮어쓰게 됩니다.\n\n"
-                    + "드라이브 — " + remote.SourcePC + " 에서 " + Pretty(remote.ExportedAt) + "\n"
-                    + "이 PC — 마지막 동기화 뒤 애드온이나 설정이 바뀜",
-                    "드라이브 것으로 맞추기", "이 PC 것으로 맞추기", "취소", MsgKind.Warning);
-                if (r == DialogResult.Yes) SyncDown(remote);
-                else if (r == DialogResult.No) SyncUp();
-                return;
-            }
-
-            if (remoteChanged) { SyncDown(remote); return; }
-            if (localChanged) { SyncUp(); return; }
-
-            Status("이미 최신입니다.");
-            Info("이미 최신입니다.\n\n드라이브와 이 PC 가 같은 상태입니다.");
+            bool doUp = (r == DialogResult.Yes) ? up : !up;
+            if (doUp) SyncUp();
+            else SyncDown(remote);
         }
 
         void SyncUp()

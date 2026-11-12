@@ -6,7 +6,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace WowAddonManager
+namespace AddSync
 {
     public class DriveFile
     {
@@ -30,7 +30,8 @@ namespace WowAddonManager
         const string TokenUrl = "https://oauth2.googleapis.com/token";
         const string ApiFiles = "https://www.googleapis.com/drive/v3/files";
         const string UploadFiles = "https://www.googleapis.com/upload/drive/v3/files";
-        public const string FolderName = "WoW 애드온 매니저";
+        public const string FolderName = "AddSync";
+        const string OldFolderName = "WoW 애드온 매니저";
 
         static string accessToken = "";
         static DateTime accessExpires = DateTime.MinValue;
@@ -253,10 +254,24 @@ namespace WowAddonManager
         // ── 폴더 / 파일 ─────────────────────────────────────────
         public static string EnsureFolder()
         {
-            string q = "mimeType='application/vnd.google-apps.folder' and trashed=false and name="
-                       + Quote(FolderName);
-            List<DriveFile> found = Query(q);
+            const string folderMime = "mimeType='application/vnd.google-apps.folder' and trashed=false and name=";
+
+            List<DriveFile> found = Query(folderMime + Quote(FolderName));
             if (found.Count > 0) return found[0].Id;
+
+            // 이름을 바꾸기 전에 쓰던 폴더가 있으면 새로 만들지 말고 이름만 바꾼다.
+            // 새로 만들면 이미 올려 둔 애드온을 못 찾는다.
+            List<DriveFile> old = Query(folderMime + Quote(OldFolderName));
+            if (old.Count > 0)
+            {
+                try
+                {
+                    Send("PATCH", ApiFiles + "/" + old[0].Id + "?fields=id",
+                         "{\"name\":" + Json.Quote(FolderName) + "}", "application/json");
+                }
+                catch { }
+                return old[0].Id;
+            }
 
             string json = "{\"name\":" + Json.Quote(FolderName)
                 + ",\"mimeType\":\"application/vnd.google-apps.folder\"}";
@@ -399,7 +414,7 @@ namespace WowAddonManager
                 { manifestId = d.Id; break; }
             if (manifestId.Length == 0) return st;
 
-            string temp = Path.Combine(Path.GetTempPath(), "WowAddonManagerPeek");
+            string temp = Path.Combine(Path.GetTempPath(), "AddSyncPeek");
             try
             {
                 if (Directory.Exists(temp)) Directory.Delete(temp, true);
@@ -554,7 +569,7 @@ namespace WowAddonManager
             Tls.Prepare();
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
             req.Method = method;
-            req.UserAgent = "WowAddonManager/" + AppInfo.Version;
+            req.UserAgent = "AddSync/" + AppInfo.Version;
             req.Headers["Authorization"] = "Bearer " + Token();
             req.Timeout = 60000;
             req.ReadWriteTimeout = 120000;
@@ -582,7 +597,7 @@ namespace WowAddonManager
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
             req.Method = "POST";
             req.ContentType = "application/x-www-form-urlencoded";
-            req.UserAgent = "WowAddonManager/" + AppInfo.Version;
+            req.UserAgent = "AddSync/" + AppInfo.Version;
             req.Timeout = 30000;
 
             byte[] data = Encoding.UTF8.GetBytes(body);

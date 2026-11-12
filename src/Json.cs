@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace WowAddonManager
+namespace AddSync
 {
     /// <summary>
     /// 의존성 없는 최소 JSON 읽기/쓰기.

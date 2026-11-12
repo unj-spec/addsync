@@ -5,7 +5,7 @@ using System.IO;
 using System.Text;
 using System.Windows.Forms;
 
-namespace WowAddonManager
+namespace AddSync
 {
     /// <summary>
     /// 구글 연동 설정 — 사용자가 자기 OAuth 클라이언트 ID 를 넣는 창.

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace WowAddonManager
+namespace AddSync
 {
     /// <summary>설치하면 무엇이 바뀌는지 먼저 보여준다</summary>
     public class PreviewForm : Form

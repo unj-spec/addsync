@@ -6,7 +6,7 @@
 #define AppExe "AddSync.exe"
 #define AppPublisher "Bowluvr"
 #define AppAuthor "made by Bowluvr"
-#define AppUrl "https://github.com/unj-spec/wow-addon-manager"
+#define AppUrl "https://github.com/unj-spec/addsync"
 ; exe 의 버전 정보에서 가져온다 (1.0.0.0 → 1.0.0)
 #define FullVer GetVersionNumbersString("AddSync.exe")
 #define AppVersion Copy(FullVer, 1, RPos(".", FullVer) - 1)

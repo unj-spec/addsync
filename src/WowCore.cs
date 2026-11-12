@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
-namespace WowAddonManager
+namespace AddSync
 {
     /// <summary>진행 상황 보고용 콜백</summary>
     public delegate void Reporter(string message, int percent);

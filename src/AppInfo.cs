@@ -8,15 +8,15 @@ using System.Text;
 [assembly: AssemblyProduct("AddSync")]
 [assembly: AssemblyCompany("unj-spec")]
 [assembly: AssemblyCopyright("MIT License")]
-[assembly: AssemblyVersion(WowAddonManager.AppInfo.Version)]
-[assembly: AssemblyFileVersion(WowAddonManager.AppInfo.Version)]
+[assembly: AssemblyVersion(AddSync.AppInfo.Version)]
+[assembly: AssemblyFileVersion(AddSync.AppInfo.Version)]
 
-namespace WowAddonManager
+namespace AddSync
 {
     public static class AppInfo
     {
         /// <summary>이 값 하나만 올리면 설치 파일과 자동 업데이트 버전이 같이 올라간다</summary>
-        public const string Version = "1.1.0";
+        public const string Version = "1.1.1";
 
         public const string Name = "AddSync";
         public const string Author = "made by Bowluvr";
@@ -53,7 +53,7 @@ namespace WowAddonManager
             }
         }
 
-        public const string RepoName = "wow-addon-manager";
+        public const string RepoName = "addsync";
 
         public static string RepoUrl
         {

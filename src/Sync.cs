@@ -6,7 +6,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace WowAddonManager
+namespace AddSync
 {
     // ── 내보낸 꾸러미의 구조 ────────────────────────────────────
     public class AddonEntry

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace WowAddonManager
+namespace AddSync
 {
     public class MainForm : Form
     {

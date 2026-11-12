@@ -5,7 +5,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace WowAddonManager
+namespace AddSync
 {
     public class ReleaseInfo
     {
@@ -44,7 +44,7 @@ namespace WowAddonManager
             {
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(ApiUrl);
                 // 사용자 정보는 보내지 않는다. 일반적인 클라이언트 이름만.
-                req.UserAgent = "WowAddonManager/" + AppInfo.Version;
+                req.UserAgent = "AddSync/" + AppInfo.Version;
                 req.Accept = "application/vnd.github+json";
                 req.Timeout = 10000;
                 req.ReadWriteTimeout = 10000;
@@ -106,13 +106,13 @@ namespace WowAddonManager
         public static string Download(ReleaseInfo r, Action<int> progress)
         {
             PrepareTls();
-            string dir = Path.Combine(Path.GetTempPath(), "WowAddonManagerUpdate");
+            string dir = Path.Combine(Path.GetTempPath(), "AddSyncUpdate");
             Directory.CreateDirectory(dir);
-            string file = Path.Combine(dir, "WowAddonManager-Setup-" + r.Version + ".exe");
+            string file = Path.Combine(dir, "AddSync-Setup-" + r.Version + ".exe");
             if (File.Exists(file)) { try { File.Delete(file); } catch { } }
 
             HttpWebRequest req = (HttpWebRequest)WebRequest.Create(r.InstallerUrl);
-            req.UserAgent = "WowAddonManager/" + AppInfo.Version;
+            req.UserAgent = "AddSync/" + AppInfo.Version;
             req.Timeout = 20000;
 
             using (WebResponse res = req.GetResponse())

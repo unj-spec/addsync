@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace WowAddonManager
+namespace AddSync
 {
     public enum MsgKind { Info, Question, Warning, Danger }
 

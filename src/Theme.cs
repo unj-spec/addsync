@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace WowAddonManager
+namespace AddSync
 {
     /// <summary>배틀넷 런처 톤 — 어두운 평면 배경, 파란 강조색, 둥근 모서리</summary>
     public static class Theme

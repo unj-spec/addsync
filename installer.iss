@@ -64,13 +64,15 @@ Name: "desktopicon"; Description: "바탕 화면에 바로 가기 만들기"; Gr
 Source: "AddSync.exe";         DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE";             DestDir: "{app}"; Flags: ignoreversion
 
-; 이름을 바꾸기 전 설치본이 남긴 것
+; 이름을 바꾸기 전 설치본이 남긴 것.
+; 예전 바로 가기는 {group} 아래가 아니라 예전 이름의 그룹 폴더에 통째로 들어 있다.
+; ({group} 은 이제 'AddSync' 라서 {group}\WoW… 로 지우면 안 지워진다)
 [InstallDelete]
-Type: files; Name: "{app}\WowAddonManager.exe"
-Type: files; Name: "{app}\README.md"
-Type: files; Name: "{group}\WoW 애드온 매니저.lnk"
-Type: files; Name: "{group}\WoW 애드온 매니저 제거.lnk"
-Type: files; Name: "{autodesktop}\WoW 애드온 매니저.lnk"
+Type: files;         Name: "{app}\WowAddonManager.exe"
+Type: files;         Name: "{app}\README.md"
+Type: filesandordirs; Name: "{autoprograms}\WoW 애드온 매니저"
+Type: files;         Name: "{autodesktop}\WoW 애드온 매니저.lnk"
+Type: files;         Name: "{autodesktop}\WowAddonManager.exe.lnk"
 
 [Icons]
 Name: "{group}\{#AppName}";          Filename: "{app}\{#AppExe}"
